@@ -1,78 +1,112 @@
-import React from 'react';
-import { motion, useMotionValue, useTransform, PanInfo, animate } from 'framer-motion';
+import React, { useCallback, useEffect, useRef } from 'react';
+import { motion, useMotionValue, useTransform, PanInfo, animate, AnimationPlaybackControls } from 'framer-motion';
 import { Mod } from '../../types';
 import { Panel } from '../UI/CyberComponents';
 import { ThumbsUp, User, Calendar } from 'lucide-react';
 
-interface ModCardProps {
-  mod: Mod;
-  onSwipe: (direction: 'left' | 'right') => void;
-  style?: any;
-  drag?: boolean | "x" | "y";
-  isExiting?: boolean;
-  exitDirection?: 'left' | 'right' | null;
+const FALLBACK_IMAGE = 'https://via.placeholder.com/600x400?text=No+Image';
+
+export interface SwipeSignal {
+  direction: 'left' | 'right';
+  modId: number;
+  nonce: number;
 }
 
-const ModCard: React.FC<ModCardProps> = ({ mod, onSwipe, style, drag, isExiting, exitDirection }) => {
+interface ModCardProps {
+  mod: Mod;
+  onSwipe: (direction: 'left' | 'right', modId: number) => void;
+  onSwipeStart?: () => void;
+  style?: any;
+  drag?: boolean | "x" | "y";
+  swipeSignal?: SwipeSignal | null;
+}
+
+const SWIPE_THRESHOLD = 110;
+const SWIPE_VELOCITY = 650;
+
+const ModCard: React.FC<ModCardProps> = ({ mod, onSwipe, onSwipeStart, style, drag, swipeSignal }) => {
   const x = useMotionValue(0);
-  const rotate = useTransform(x, [-200, 200], [-10, 10]);
+  const rotate = useTransform(x, [-220, 220], [-12, 12]);
   
   // Overlay colors for feedback
-  const approveOpacity = useTransform(x, [50, 150], [0, 0.5]);
-  const rejectOpacity = useTransform(x, [-150, -50], [0.5, 0]);
+  const approveOpacity = useTransform(x, [40, 150], [0, 0.7]);
+  const rejectOpacity = useTransform(x, [-150, -40], [0.7, 0]);
+  const animationRef = useRef<AnimationPlaybackControls | null>(null);
+  const isDismissingRef = useRef(false);
 
-  const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    const threshold = 100;
+  const finishSwipe = useCallback((direction: 'left' | 'right') => {
+    if (isDismissingRef.current) return;
+
+    isDismissingRef.current = true;
+    onSwipeStart?.();
+    animationRef.current?.stop();
+
+    const destination = direction === 'right' ? window.innerWidth * 0.95 : window.innerWidth * -0.95;
+
+    animationRef.current = animate(x, destination, {
+      type: 'spring',
+      stiffness: 260,
+      damping: 24,
+      velocity: direction === 'right' ? 9 : -9,
+      onComplete: () => {
+        onSwipe(direction, mod.mod_id);
+      },
+    });
+  }, [mod.mod_id, onSwipe, onSwipeStart, x]);
+
+  useEffect(() => {
+    animationRef.current?.stop();
+    isDismissingRef.current = false;
+    x.set(0);
+  }, [mod.mod_id, x]);
+
+  useEffect(() => {
+    if (!swipeSignal || swipeSignal.modId !== mod.mod_id || isDismissingRef.current) {
+      return;
+    }
+
+    finishSwipe(swipeSignal.direction);
+  }, [finishSwipe, mod.mod_id, swipeSignal]);
+
+  useEffect(() => () => {
+    animationRef.current?.stop();
+  }, []);
+
+  const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    if (isDismissingRef.current) {
+      return;
+    }
+
     const velocity = info.velocity.x;
     const offset = info.offset.x;
     
     // Swipe if offset exceeds threshold or velocity is high enough
-    if (offset > threshold || velocity > 500) {
-      // Animate card off screen before calling onSwipe
-      animate(x, 500, { 
-        type: "spring", 
-        stiffness: 300, 
-        damping: 30,
-        onComplete: () => onSwipe('right')
-      });
-    } else if (offset < -threshold || velocity < -500) {
-      animate(x, -500, { 
-        type: "spring", 
-        stiffness: 300, 
-        damping: 30,
-        onComplete: () => onSwipe('left')
-      });
+    if (offset > SWIPE_THRESHOLD || velocity > SWIPE_VELOCITY) {
+      finishSwipe('right');
+    } else if (offset < -SWIPE_THRESHOLD || velocity < -SWIPE_VELOCITY) {
+      finishSwipe('left');
     } else {
       // Snap back to center
-      animate(x, 0, { type: "spring", stiffness: 500, damping: 30 });
+      animationRef.current?.stop();
+      animationRef.current = animate(x, 0, { type: 'spring', stiffness: 420, damping: 28, mass: 0.65 });
     }
   };
 
-  // Animation variants for exit
-  const exitX = exitDirection === 'right' ? 500 : exitDirection === 'left' ? -500 : 0;
-
   return (
     <motion.div
-      style={{ x, rotate, WebkitUserDrag: 'none', ...style } as any}
+      style={{ x, rotate, WebkitUserDrag: 'none', touchAction: 'pan-y', ...style } as any}
       drag={drag ? "x" : false}
       dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-      dragElastic={0.9}
+      dragElastic={0.18}
+      dragMomentum={false}
       onDragEnd={handleDragEnd}
-      initial={{ scale: 0.95, opacity: 0 }}
+      initial={{ scale: 0.97, opacity: 0, y: 18 }}
       animate={{ 
         scale: style?.scale ?? 1, 
         opacity: 1,
         y: style?.y ?? 0,
-        x: isExiting ? exitX : 0,
-        rotate: isExiting ? (exitDirection === 'right' ? 10 : -10) : 0,
       }}
-      exit={{ 
-        x: exitX,
-        opacity: 0,
-        rotate: exitDirection === 'right' ? 15 : -15,
-        transition: { duration: 0.3 }
-      }}
-      transition={{ type: "spring", stiffness: 300, damping: 25 }}
+      transition={{ type: 'spring', stiffness: 320, damping: 28, mass: 0.72 }}
       className="absolute w-full max-w-md h-[65vh] cursor-grab active:cursor-grabbing select-none"
     >
       <Panel className="h-full flex flex-col p-0 border-l-4 border-cp-yellow bg-black overflow-hidden relative select-none">
@@ -100,8 +134,12 @@ const ModCard: React.FC<ModCardProps> = ({ mod, onSwipe, style, drag, isExiting,
         {/* Image */}
         <div className="relative h-1/2 w-full overflow-hidden group">
           <img 
-            src={mod.picture_url || 'https://via.placeholder.com/600x400?text=No+Image'} 
+            src={mod.picture_url || FALLBACK_IMAGE} 
             alt={mod.name}
+            onError={(event) => {
+              event.currentTarget.onerror = null;
+              event.currentTarget.src = FALLBACK_IMAGE;
+            }}
             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 pointer-events-none"
             draggable={false}
           />
@@ -139,11 +177,11 @@ const ModCard: React.FC<ModCardProps> = ({ mod, onSwipe, style, drag, isExiting,
                </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto cp-scrollbar pr-2 mb-4">
-              <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line font-mono">
-                {mod.summary || "No summary provided."}
-              </p>
-            </div>
+             <div className="flex-1 overflow-hidden pr-2 mb-4">
+               <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line font-mono line-clamp-6">
+                 {mod.summary || "No summary provided."}
+               </p>
+             </div>
 
             <div className="flex gap-2 mt-auto">
                {/* Decorative footer bits */}

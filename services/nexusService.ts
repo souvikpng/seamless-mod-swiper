@@ -1,4 +1,4 @@
-import { NEXUS_API_BASE, MOCK_MODS } from '../constants';
+import { NEXUS_API_BASE } from '../constants';
 import { Mod, Game } from '../types';
 
 /**
@@ -23,7 +23,7 @@ export interface FetchModsResponse {
  * Progress callback for bulk fetching
  */
 export interface FetchProgress {
-  phase: 'pool' | 'fetching' | 'lists' | 'complete';
+  phase: 'auth' | 'pool' | 'fetching' | 'lists' | 'complete';
   current: number;
   total: number;
   message: string;
@@ -59,6 +59,23 @@ const getHeaders = (apiKey: string) => ({
   'Application-Name': 'Seamless Mod Swiper',
   'Application-Version': '1.0.0',
 });
+
+const getApiErrorMessage = (response: Response, context: string): string => {
+  if (response.status === 401) {
+    return 'Invalid API key. Please verify your Nexus Mods API key and try again.';
+  }
+
+  if (response.status === 429) {
+    const retryAfter = response.headers.get('Retry-After') || '60';
+    return `Nexus Mods rate limit reached. Please wait ${retryAfter} seconds before trying again.`;
+  }
+
+  if (response.status === 403) {
+    return 'Access forbidden. Your Nexus Mods API key does not have permission for this request.';
+  }
+
+  return `${context}: ${response.status} ${response.statusText}`;
+};
 
 /**
  * Checks if a mod has valid data for display
@@ -116,7 +133,7 @@ const fetchUpdatedModIds = async (
   const rateLimit = parseRateLimitHeaders(response);
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch updated mods: ${response.status}`);
+    throw new Error(getApiErrorMessage(response, 'Failed to fetch updated mods'));
   }
 
   const data = await response.json();
@@ -217,17 +234,8 @@ export const fetchModsBulk = async (
   onProgress?: ProgressCallback,
   excludeIds: Set<number> = new Set()
 ): Promise<FetchModsResponse> => {
-  if (!apiKey) {
-    console.warn("No API Key provided, returning mocks for UI demo.");
-    await delay(1500);
-    return {
-      mods: MOCK_MODS.map(m => ({
-        ...m,
-        mod_id: m.mod_id + Math.floor(Math.random() * 10000),
-        domain_name: game,
-      })),
-      rateLimit: null,
-    };
+  if (!apiKey.trim()) {
+    throw new Error('A Nexus Mods API key is required to load mods.');
   }
 
   try {
@@ -246,6 +254,7 @@ export const fetchModsBulk = async (
 
     const poolResults = await Promise.allSettled(poolPromises);
     const allModIds = new Set<number>();
+    const successfulPoolResults = poolResults.filter((result): result is PromiseFulfilledResult<{ modIds: number[]; rateLimit: RateLimitInfo | null }> => result.status === 'fulfilled');
     
     for (const result of poolResults) {
       if (result.status === 'fulfilled') {
@@ -260,11 +269,25 @@ export const fetchModsBulk = async (
       }
     }
 
+    if (successfulPoolResults.length === 0) {
+      const firstFailure = poolResults.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+      throw firstFailure?.reason instanceof Error
+        ? firstFailure.reason
+        : new Error('Failed to fetch mod pool from Nexus Mods.');
+    }
+
     onProgress?.({ phase: 'pool', current: 3, total: 3, message: `Found ${allModIds.size} unique mod IDs` });
 
     // Shuffle and pick the mods we want to fetch
     const shuffledIds = shuffleArray(Array.from(allModIds));
-    const idsToFetch = shuffledIds.slice(0, count);
+    const safeReserve = 8;
+    const listRequestReserve = 3;
+    const remainingBudget = latestRateLimit?.hourlyRemaining ?? count + safeReserve + listRequestReserve;
+    const safeDetailBudget = latestRateLimit
+      ? Math.max(0, remainingBudget - safeReserve - listRequestReserve)
+      : count;
+    const targetCount = Math.min(count, safeDetailBudget, shuffledIds.length);
+    const idsToFetch = shuffledIds.slice(0, targetCount);
 
     console.log(`Fetching details for ${idsToFetch.length} mods...`);
 
@@ -295,7 +318,12 @@ export const fetchModsBulk = async (
       }
 
       // Check rate limits and slow down if needed
-      if (latestRateLimit && latestRateLimit.hourlyRemaining < 50) {
+      if (latestRateLimit && latestRateLimit.hourlyRemaining <= safeReserve + listRequestReserve) {
+        console.warn('Rate limit critically low, stopping detail fetch early.');
+        break;
+      }
+
+      if (latestRateLimit && latestRateLimit.hourlyRemaining < 20) {
         console.warn('Rate limit getting low, slowing down...');
         await delay(500);
       } else if (i + batchSize < idsToFetch.length) {
@@ -303,27 +331,44 @@ export const fetchModsBulk = async (
       }
     }
 
-    // Phase 3: Also fetch from list endpoints for variety
-    onProgress?.({ phase: 'lists', current: 0, total: 3, message: 'Fetching curated lists...' });
-
     const listEndpoints = ['trending', 'latest_added', 'latest_updated'];
-    const listSettled = await Promise.allSettled(
-      listEndpoints.map(endpoint => fetchFromListEndpoint(apiKey, game, endpoint))
-    );
+    const canFetchCuratedLists = !latestRateLimit || latestRateLimit.hourlyRemaining > listEndpoints.length;
 
-    for (const settled of listSettled) {
-      if (settled.status === 'rejected') {
-        console.warn('Failed to fetch list endpoint:', settled.reason);
-        continue;
-      }
-      const result = settled.value;
-      if (result.rateLimit) latestRateLimit = result.rateLimit;
-      for (const mod of result.mods) {
-        if (!seenIds.has(mod.mod_id)) {
-          seenIds.add(mod.mod_id);
-          allMods.push(mod);
+    if (canFetchCuratedLists) {
+      // Phase 3: Also fetch from list endpoints for variety
+      onProgress?.({ phase: 'lists', current: 0, total: 3, message: 'Fetching curated lists...' });
+
+      const listSettled = await Promise.allSettled(
+        listEndpoints.map(endpoint => fetchFromListEndpoint(apiKey, game, endpoint))
+      );
+
+      let successfulListCount = 0;
+
+      for (const settled of listSettled) {
+        if (settled.status === 'rejected') {
+          console.warn('Failed to fetch list endpoint:', settled.reason);
+          continue;
+        }
+
+        successfulListCount += 1;
+        const result = settled.value;
+        if (result.rateLimit) latestRateLimit = result.rateLimit;
+        for (const mod of result.mods) {
+          if (!seenIds.has(mod.mod_id)) {
+            seenIds.add(mod.mod_id);
+            allMods.push(mod);
+          }
         }
       }
+
+      if (successfulListCount === 0 && allMods.length === 0) {
+        const firstFailure = listSettled.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+        throw firstFailure?.reason instanceof Error
+          ? firstFailure.reason
+          : new Error('Failed to fetch curated Nexus Mods lists.');
+      }
+    } else {
+      onProgress?.({ phase: 'lists', current: 0, total: 3, message: 'Skipping curated lists to preserve API quota...' });
     }
 
     onProgress?.({ phase: 'complete', current: allMods.length, total: allMods.length, message: `Loaded ${allMods.length} mods` });
@@ -358,16 +403,8 @@ export const fetchMods = async (
   }
 
   // Lite mode: just fetch from list endpoints
-  if (!apiKey) {
-    await delay(1500);
-    return {
-      mods: MOCK_MODS.map(m => ({
-        ...m,
-        mod_id: m.mod_id + Math.floor(Math.random() * 10000),
-        domain_name: game,
-      })),
-      rateLimit: null,
-    };
+  if (!apiKey.trim()) {
+    throw new Error('A Nexus Mods API key is required to load mods.');
   }
 
   const listEndpoints = ['trending', 'latest_added', 'latest_updated'];
@@ -403,9 +440,22 @@ export const validateApiKey = async (apiKey: string): Promise<boolean> => {
     const response = await fetch(`${NEXUS_API_BASE}/users/validate.json`, {
       headers: getHeaders(apiKey),
     });
-    return response.ok;
-  } catch {
-    return false;
+
+    if (response.status === 401) {
+      return false;
+    }
+
+    if (!response.ok) {
+      throw new Error(getApiErrorMessage(response, 'Failed to validate API key'));
+    }
+
+    return true;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+
+    throw new Error('Failed to validate API key. Please try again.');
   }
 };
 

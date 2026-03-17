@@ -2,9 +2,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import ThreeBackground from './components/ThreeBackground';
 import LandingPage from './components/LandingPage';
 import CardStack from './components/Swiper/CardStack';
+import BootSequence from './components/UI/BootSequence';
 import { CyberButton, Panel, GlitchText } from './components/UI/CyberComponents';
 import { Mod, Game } from './types';
-import { fetchModsBulk, RateLimitInfo, FetchProgress } from './services/nexusService';
+import { fetchModsBulk, validateApiKey, RateLimitInfo, FetchProgress } from './services/nexusService';
 import { 
   getCachedMods, 
   appendToCachedMods,
@@ -14,12 +15,32 @@ import {
   getUnseenCachedMods,
   getCachedModCount
 } from './services/cacheService';
-import { Download, List, LogOut, Zap, Trash2, Database, Settings, RotateCcw, Loader2, RefreshCw } from 'lucide-react';
+import { Download, List, LogOut, Zap, Trash2, Database, Settings, RotateCcw, RefreshCw } from 'lucide-react';
+
+interface LoadOptions {
+  background?: boolean;
+  replaceQueue?: boolean;
+  validateKey?: boolean;
+  showBootSequence?: boolean;
+  count?: number;
+}
 
 // Configuration
-const BULK_FETCH_COUNT = 300; // Mods to fetch per bulk operation
+const TARGET_BULK_FETCH_COUNT = 300; // Target mods to fetch per full preload
 const LOW_QUEUE_THRESHOLD = 20; // Auto-refresh when queue drops below this
 const AUTO_REFRESH_COOLDOWN = 60000; // Minimum time between auto-refreshes (ms)
+const BACKGROUND_FETCH_COUNT = 120; // Background fetch target while swiping
+
+const dedupeMods = (entries: Mod[]) => Array.from(new Map(entries.map((mod) => [mod.mod_id, mod])).values());
+
+const getRateLimitSeverity = (rateLimit: RateLimitInfo | null) => {
+  if (!rateLimit || rateLimit.hourlyLimit <= 0) return 'normal';
+
+  const ratio = rateLimit.hourlyRemaining / rateLimit.hourlyLimit;
+  if (ratio <= 0.12) return 'critical';
+  if (ratio <= 0.28) return 'warning';
+  return 'normal';
+};
 
 const App: React.FC = () => {
   const [apiKey, setApiKey] = useState<string | null>(null);
@@ -33,6 +54,7 @@ const App: React.FC = () => {
   const [isBulkLoading, setIsBulkLoading] = useState(false);
   const [loadProgress, setLoadProgress] = useState<FetchProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [landingError, setLandingError] = useState<string | null>(null);
   const [rateLimit, setRateLimit] = useState<RateLimitInfo | null>(null);
   const [view, setView] = useState<'landing' | 'swiping' | 'list'>('landing');
   const [showSettings, setShowSettings] = useState(false);
@@ -46,6 +68,7 @@ const App: React.FC = () => {
   const lastAutoRefresh = useRef<number>(0);
   const isAutoRefreshing = useRef<boolean>(false);
   const seenModIdsRef = useRef<Set<number>>(seenModIds);
+  const modsRef = useRef<Mod[]>(mods);
 
   // Initialization: Load persistence from localStorage
   useEffect(() => {
@@ -79,6 +102,10 @@ const App: React.FC = () => {
     localStorage.setItem('approvedMods', JSON.stringify(approvedMods));
   }, [approvedMods]);
 
+  useEffect(() => {
+    modsRef.current = mods;
+  }, [mods]);
+
   // Close settings dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -96,19 +123,22 @@ const App: React.FC = () => {
     };
   }, [showSettings]);
 
+  const updateCacheStats = useCallback(async (game: Game) => {
+    const count = await getCachedModCount(game);
+    const age = await getCacheAge(game);
+    setCachedCount(count);
+    setCacheAge(age);
+  }, []);
+
   // Update cache stats periodically
   useEffect(() => {
-    const updateCacheStats = async () => {
-      const count = await getCachedModCount(selectedGame);
-      const age = await getCacheAge(selectedGame);
-      setCachedCount(count);
-      setCacheAge(age);
-    };
+    updateCacheStats(selectedGame);
+    const interval = setInterval(() => {
+      updateCacheStats(selectedGame);
+    }, 30000);
 
-    updateCacheStats();
-    const interval = setInterval(updateCacheStats, 30000); // Update every 30s
     return () => clearInterval(interval);
-  }, [selectedGame]);
+  }, [selectedGame, updateCacheStats]);
 
   // Auto-refresh when queue runs low
   useEffect(() => {
@@ -148,7 +178,11 @@ const App: React.FC = () => {
           });
         } else {
           // Cache is running low, fetch more in background
-          await loadModsBulk(apiKey, selectedGame, true);
+          await loadModsBulk(apiKey, selectedGame, {
+            background: true,
+            replaceQueue: false,
+            count: BACKGROUND_FETCH_COUNT,
+          });
         }
       } finally {
         isAutoRefreshing.current = false;
@@ -164,27 +198,63 @@ const App: React.FC = () => {
   const loadModsBulk = useCallback(async (
     key: string, 
     game: Game, 
-    isBackground: boolean = false
+    options: LoadOptions = {}
   ) => {
-    if (!isBackground) {
+    const {
+      background = false,
+      replaceQueue = !background,
+      validateKey = false,
+      showBootSequence = false,
+      count = background ? BACKGROUND_FETCH_COUNT : TARGET_BULK_FETCH_COUNT,
+    } = options;
+
+    const normalizedKey = key.trim();
+
+    if (!normalizedKey) {
+      const message = 'Enter your Nexus Mods API key to begin.';
+      setLandingError(message);
+      throw new Error(message);
+    }
+
+    if (showBootSequence) {
       setIsLoading(true);
     }
+
     setIsBulkLoading(true);
+    setLandingError(null);
     setError(null);
+    setLoadProgress(null);
+    let validationComplete = !validateKey;
     
     try {
+      if (validateKey) {
+        setLoadProgress({
+          phase: 'auth',
+          current: 0,
+          total: 1,
+          message: 'Validating access token...',
+        });
+
+        const isValidKey = await validateApiKey(normalizedKey);
+        if (!isValidKey) {
+          throw new Error('Invalid API key. Please verify your Nexus Mods API key and try again.');
+        }
+
+        validationComplete = true;
+      }
+
       // First, check if we have unseen mods in cache (use ref for current value)
       const currentSeenIds = seenModIdsRef.current;
       const cachedMods = await getCachedMods(game);
       const unseenCached = filterUnseenMods(cachedMods, currentSeenIds);
+      const queuedIds = new Set(modsRef.current.map((mod) => mod.mod_id));
       
-      if (unseenCached.length >= BULK_FETCH_COUNT / 2 && !isBackground) {
+      if (replaceQueue && unseenCached.length >= Math.floor(count / 2)) {
         // Use cache if we have a good amount
         console.log(`Using ${unseenCached.length} unseen mods from cache`);
         setMods(unseenCached);
         setCurrentModIndex(0); // Reset to start for new batch
-        setIsLoading(false);
-        setIsBulkLoading(false);
+        await updateCacheStats(game);
         return;
       }
 
@@ -192,10 +262,14 @@ const App: React.FC = () => {
       const alreadyCachedIds = new Set(cachedMods.map(m => m.mod_id));
       const excludeIds = new Set([...currentSeenIds, ...alreadyCachedIds]);
 
+      if (!replaceQueue) {
+        queuedIds.forEach((id) => excludeIds.add(id));
+      }
+
       const response = await fetchModsBulk(
-        key, 
+        normalizedKey, 
         game, 
-        BULK_FETCH_COUNT,
+        count,
         (progress) => setLoadProgress(progress),
         excludeIds
       );
@@ -207,58 +281,84 @@ const App: React.FC = () => {
 
       // Add new mods to cache
       if (response.mods.length > 0) {
-        await appendToCachedMods(game, response.mods);
+        try {
+          await appendToCachedMods(game, response.mods);
+        } catch (cacheError) {
+          console.warn('Failed to update cache after fetch:', cacheError);
+        }
       }
 
       // Filter and set mods for display
       const unseenMods = filterUnseenMods(response.mods, currentSeenIds);
       
-      if (!isBackground) {
+      if (replaceQueue) {
         // Also include unseen from cache
-        const allUnseen = [...unseenCached, ...unseenMods];
-        const uniqueUnseen = Array.from(
-          new Map(allUnseen.map(m => [m.mod_id, m])).values()
-        );
+        const uniqueUnseen = dedupeMods([...unseenCached, ...unseenMods]);
         setMods(uniqueUnseen);
         setCurrentModIndex(0); // Reset to start for new batch
       } else {
-        // Background refresh: append to existing queue
+        // Background refresh: append to existing queue without disturbing the active card
+        const refillPool = dedupeMods([...unseenCached.slice(0, LOW_QUEUE_THRESHOLD), ...unseenMods]);
         setMods(prev => {
           const currentIds = new Set(prev.map(m => m.mod_id));
-          const newMods = unseenMods.filter(m => !currentIds.has(m.mod_id));
+          const newMods = refillPool.filter(m => !currentIds.has(m.mod_id));
           return [...prev, ...newMods];
         });
       }
 
       // Update cache stats
-      const count = await getCachedModCount(game);
-      const age = await getCacheAge(game);
-      setCachedCount(count);
-      setCacheAge(age);
+      await updateCacheStats(game);
 
-      if (unseenMods.length === 0 && unseenCached.length === 0) {
+      if (replaceQueue && unseenMods.length === 0 && unseenCached.length === 0) {
         setError("No new mods found. You may have seen most available mods!");
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to fetch mods. Check console.";
-      setError(message);
+
+      if (validateKey && !validationComplete) {
+        setLandingError(message);
+        setMods([]);
+        setCurrentModIndex(0);
+        setApiKey(null);
+        setView('landing');
+      } else {
+        setError(message);
+      }
+
       console.error("Failed to fetch mods:", err);
     } finally {
-      setIsLoading(false);
+      if (showBootSequence) {
+        setIsLoading(false);
+      }
       setIsBulkLoading(false);
       setLoadProgress(null);
     }
-  }, []);
+  }, [updateCacheStats]);
 
-  const handleStart = (key: string, game: Game) => {
-    setApiKey(key);
+  const handleStart = async (key: string, game: Game) => {
+    const normalizedKey = key.trim();
+
+    if (!normalizedKey) {
+      setLandingError('Enter your Nexus Mods API key to begin.');
+      return;
+    }
+
+    setLandingError(null);
+    setApiKey(normalizedKey);
     setSelectedGame(game);
     setView('swiping');
-    loadModsBulk(key, game);
+    setMods([]);
+    setCurrentModIndex(0);
+    await loadModsBulk(normalizedKey, game, {
+      replaceQueue: true,
+      validateKey: true,
+      showBootSequence: true,
+      count: TARGET_BULK_FETCH_COUNT,
+    });
   };
 
   const handleApprove = (mod: Mod) => {
-    setApprovedMods(prev => [...prev, mod]);
+    setApprovedMods(prev => prev.some((entry) => entry.mod_id === mod.mod_id) ? prev : [...prev, mod]);
     setSeenModIds(prev => new Set(prev).add(mod.mod_id));
   };
 
@@ -272,7 +372,7 @@ const App: React.FC = () => {
 
   const handleExport = () => {
     const content = approvedMods.map(m => 
-      `${m.name}\nURL: https://www.nexusmods.com/${m.domain_name}/mods/${m.mod_id}\n-------------------`
+      `${m.name || 'Unknown Mod'}\nURL: https://www.nexusmods.com/${m.domain_name}/mods/${m.mod_id}\n-------------------`
     ).join('\n\n');
     
     const blob = new Blob([content], { type: 'text/plain' });
@@ -304,10 +404,25 @@ const App: React.FC = () => {
       setCacheAge(null);
       // Reload mods
       if (apiKey) {
-        loadModsBulk(apiKey, selectedGame);
+        loadModsBulk(apiKey, selectedGame, {
+          replaceQueue: true,
+          showBootSequence: true,
+          count: TARGET_BULK_FETCH_COUNT,
+        });
       }
     }
   };
+
+  const rateLimitSeverity = getRateLimitSeverity(rateLimit);
+  const rateLimitClassName =
+    rateLimitSeverity === 'critical'
+      ? 'text-cp-red'
+      : rateLimitSeverity === 'warning'
+        ? 'text-cp-yellow'
+        : 'text-gray-400';
+  const backgroundProgressPercent = loadProgress && loadProgress.total > 0
+    ? Math.min((loadProgress.current / loadProgress.total) * 100, 100)
+    : 0;
 
   return (
     <div className="relative min-h-screen text-white font-sans overflow-hidden">
@@ -321,16 +436,16 @@ const App: React.FC = () => {
                SMS <span className="text-white text-xs align-top">v1.0</span>
              </div>
              <div className="text-[10px] text-cp-cyan font-mono">
-               NET_STATUS: ONLINE
-             </div>
-             {rateLimit && (
-               <div className="flex items-center gap-1 text-[10px] font-mono mt-1">
-                 <Zap size={10} className={rateLimit.hourlyRemaining < 100 ? 'text-cp-red' : 'text-cp-yellow'} />
-                 <span className={rateLimit.hourlyRemaining < 100 ? 'text-cp-red' : 'text-gray-400'}>
-                   API: {rateLimit.hourlyRemaining}/{rateLimit.hourlyLimit} hr
-                 </span>
-               </div>
-             )}
+                NET_STATUS: ONLINE
+              </div>
+              {rateLimit && (
+                <div className="flex items-center gap-1 text-[10px] font-mono mt-1">
+                  <Zap size={10} className={rateLimitSeverity === 'critical' ? 'text-cp-red' : rateLimitSeverity === 'warning' ? 'text-cp-yellow' : 'text-cp-cyan'} />
+                  <span className={rateLimitClassName}>
+                    API: {rateLimit.hourlyRemaining}/{rateLimit.hourlyLimit} hr
+                  </span>
+                </div>
+              )}
              {cachedCount > 0 && (
                <div className="flex items-center gap-1 text-[10px] font-mono mt-1">
                  <Database size={10} className="text-cp-cyan" />
@@ -345,7 +460,11 @@ const App: React.FC = () => {
             {/* Refresh Button */}
             <button 
               type="button"
-              onClick={() => apiKey && loadModsBulk(apiKey, selectedGame, false)}
+              onClick={() => apiKey && loadModsBulk(apiKey, selectedGame, {
+                background: true,
+                replaceQueue: false,
+                count: BACKGROUND_FETCH_COUNT,
+              })}
               disabled={isBulkLoading}
               className={`bg-black/50 border p-2 transition-colors ${
                 isBulkLoading 
@@ -407,6 +526,11 @@ const App: React.FC = () => {
               type="button"
               onClick={() => {
                 setApiKey(null);
+                setError(null);
+                setLandingError(null);
+                setIsLoading(false);
+                setIsBulkLoading(false);
+                setLoadProgress(null);
                 setView('landing');
                 setShowSettings(false);
               }}
@@ -418,69 +542,66 @@ const App: React.FC = () => {
         </header>
       )}
 
+      {view === 'swiping' && isBulkLoading && !isLoading && loadProgress && (
+        <div className="fixed left-1/2 top-20 z-40 w-[min(92vw,24rem)] -translate-x-1/2 pointer-events-none">
+          <div className="cp-clip-box border border-cp-cyan/30 bg-black/80 px-4 py-3 shadow-[0_0_30px_rgba(0,229,255,0.08)] backdrop-blur-md">
+            <div className="flex items-center justify-between gap-3 text-[11px] font-mono uppercase tracking-[0.24em] text-cp-cyan">
+              <span className="flex items-center gap-2">
+                <RefreshCw size={14} className="animate-spin" />
+                Buffer Refresh
+              </span>
+              <span className="text-gray-500">{Math.round(backgroundProgressPercent)}%</span>
+            </div>
+            <p className="mt-2 text-xs font-mono text-gray-400">{loadProgress.message}</p>
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-900">
+              <div
+                className="h-full bg-gradient-to-r from-cp-yellow via-cp-cyan to-cp-red transition-all duration-300"
+                style={{ width: `${backgroundProgressPercent}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Content Area */}
       <main className="relative z-10 pt-16 px-4 h-screen flex flex-col">
         {view === 'landing' && (
           <div className="flex-1 flex items-center justify-center">
-            <LandingPage onStart={handleStart} />
+            <LandingPage onStart={handleStart} error={landingError} />
           </div>
         )}
 
         {view === 'swiping' && (
           <div className="flex-1 flex flex-col items-center justify-center">
-             {/* Bulk Loading Progress */}
-             {isBulkLoading && loadProgress && (
-               <div className="mb-4 p-4 bg-black/80 border border-cp-cyan max-w-md w-full">
-                 <div className="flex items-center gap-3 mb-2">
-                   <Loader2 size={20} className="text-cp-cyan animate-spin" />
-                   <span className="text-cp-cyan font-mono text-sm uppercase">
-                     {loadProgress.phase === 'pool' && 'Scanning Nexus...'}
-                     {loadProgress.phase === 'fetching' && 'Downloading Mods...'}
-                     {loadProgress.phase === 'lists' && 'Fetching Curated Lists...'}
-                     {loadProgress.phase === 'complete' && 'Complete!'}
-                   </span>
-                 </div>
-<div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-cp-cyan transition-all duration-300"
-                      style={{ width: `${loadProgress.total > 0 ? Math.min((loadProgress.current / loadProgress.total) * 100, 100) : 0}%` }}
-                    />
-                  </div>
-                 <p className="text-[10px] text-gray-500 font-mono mt-2">
-                   {loadProgress.message}
-                 </p>
-               </div>
-             )}
-
              {error && !isBulkLoading && (
-               <div className="mb-4 p-3 bg-cp-red/20 border border-cp-red text-cp-red font-mono text-xs max-w-md text-center">
-                 {error}
-               </div>
-             )}
-             
-<CardStack 
-                mods={mods} 
-                onApprove={handleApprove} 
-                onReject={handleReject} 
-                isLoading={isLoading && !isBulkLoading}
-                onQueueChange={setQueueRemaining}
-                currentIndex={currentModIndex}
-                onIndexChange={setCurrentModIndex}
-              />
+                <div className="mb-4 p-3 bg-cp-red/20 border border-cp-red text-cp-red font-mono text-xs max-w-md text-center">
+                  {error}
+                </div>
+              )}
+              
+             <CardStack 
+                 mods={mods} 
+                 onApprove={handleApprove} 
+                 onReject={handleReject} 
+                 isRefreshing={isBulkLoading && !isLoading}
+                 onQueueChange={setQueueRemaining}
+                 currentIndex={currentModIndex}
+                 onIndexChange={setCurrentModIndex}
+               />
              
              {/* Controls info - positioned at bottom with no overlap */}
              <div className="mt-4 text-center text-[10px] text-gray-600 font-mono">
                <span className="text-gray-500">[A] REJECT</span>
-               <span className="mx-4 text-gray-700">|</span>
-               <span className="text-gray-500">[D] APPROVE</span>
-               {queueRemaining > 0 && (
-                 <span className="ml-4 text-cp-cyan">({queueRemaining} in queue)</span>
-               )}
-               {isBulkLoading && (
-                 <span className="ml-4 text-cp-yellow animate-pulse">(loading more...)</span>
-               )}
-             </div>
-          </div>
+                <span className="mx-4 text-gray-700">|</span>
+                <span className="text-gray-500">[D] APPROVE</span>
+                {queueRemaining > 0 && (
+                  <span className="ml-4 text-cp-cyan">({queueRemaining} buffered)</span>
+                )}
+                {isBulkLoading && !isLoading && (
+                  <span className="ml-4 text-cp-yellow animate-pulse">(refreshing buffer...)</span>
+                )}
+              </div>
+           </div>
         )}
 
         {view === 'list' && (
@@ -504,7 +625,15 @@ const App: React.FC = () => {
                 ) : (
                   approvedMods.map((mod) => (
                     <div key={mod.mod_id} className="flex gap-4 p-4 border border-gray-800 bg-gray-900/50 hover:border-cp-cyan transition-colors group">
-                      <img src={mod.picture_url} alt="" className="w-24 h-24 object-cover border border-gray-700" />
+                      <img
+                        src={mod.picture_url || 'https://via.placeholder.com/600x400?text=No+Image'}
+                        alt={mod.name || 'Mod artwork'}
+                        onError={(event) => {
+                          event.currentTarget.onerror = null;
+                          event.currentTarget.src = 'https://via.placeholder.com/600x400?text=No+Image';
+                        }}
+                        className="w-24 h-24 object-cover border border-gray-700 bg-black"
+                      />
                       <div className="flex-1">
                         <h3 className="text-xl font-bold text-white group-hover:text-cp-cyan">{mod.name}</h3>
                         <p className="text-sm text-gray-400 font-mono mb-2">{mod.author}</p>
@@ -537,6 +666,8 @@ const App: React.FC = () => {
           </div>
         )}
       </main>
+
+      {isLoading && <BootSequence progress={loadProgress} rateLimit={rateLimit} />}
 
       {/* Reset Confirmation Modal */}
       {showResetConfirm && (

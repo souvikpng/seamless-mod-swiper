@@ -19,7 +19,7 @@ export const CyberButton: React.FC<CyberButtonProps> = ({
   className, 
   ...props 
 }) => {
-  const baseStyles = "relative px-8 py-3 font-bold uppercase tracking-widest transition-all duration-100 transform active:scale-95 cp-clip-btn group overflow-hidden border-2 border-transparent hover:border-cp-cyan/50";
+  const baseStyles = "relative px-8 py-3 font-bold uppercase tracking-widest transition-all duration-100 transform active:scale-95 cp-clip-btn group overflow-hidden border-2 border-transparent hover:border-cp-cyan/50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-transparent disabled:active:scale-100";
   
   const variants = {
     primary: "bg-cp-yellow text-cp-black hover:bg-white hover:shadow-[0_0_15px_rgba(0,229,255,0.7)]",
@@ -39,19 +39,30 @@ export const CyberButton: React.FC<CyberButtonProps> = ({
       </div>
       {/* Glitch overlay */}
       <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition-opacity" />
-      <div className="absolute bottom-0 right-0 w-2 h-2 bg-black/20 clip-path-[polygon(100%_0,0_100%,100%_100%)]" />
+      <div
+        className="absolute bottom-0 right-0 w-2 h-2 bg-black/20"
+        style={{ clipPath: 'polygon(100% 0, 0 100%, 100% 100%)' }}
+      />
     </button>
   );
 };
 
-export const GlitchText: React.FC<{ text: string; className?: string }> = ({ text, className }) => {
+export const GlitchText: React.FC<{ text: string; className?: string; active?: boolean }> = ({ text, className, active = false }) => {
+  const layerBase = active
+    ? 'opacity-80 animate-glitch-1'
+    : 'opacity-0 group-hover:opacity-100 group-hover:animate-glitch-1';
+
+  const accentLayerBase = active
+    ? 'opacity-80 animate-glitch-2'
+    : 'opacity-0 group-hover:opacity-100 group-hover:animate-glitch-2';
+
   return (
     <div className={cn("relative inline-block group", className)}>
       <span className="relative z-10">{text}</span>
-      <span className="absolute top-0 left-0 -z-10 w-full h-full text-cp-red opacity-0 group-hover:opacity-100 group-hover:animate-glitch-1 translate-x-[2px]">
+      <span className={cn("absolute top-0 left-0 -z-10 w-full h-full text-cp-red translate-x-[2px]", layerBase)}>
         {text}
       </span>
-      <span className="absolute top-0 left-0 -z-10 w-full h-full text-cp-cyan opacity-0 group-hover:opacity-100 group-hover:animate-glitch-2 -translate-x-[2px]">
+      <span className={cn("absolute top-0 left-0 -z-10 w-full h-full text-cp-cyan -translate-x-[2px]", accentLayerBase)}>
         {text}
       </span>
     </div>

@@ -12,13 +12,25 @@ const ThreeBackground: React.FC = () => {
       <div className="absolute inset-0 bg-gradient-to-br from-[#0a0a0f] via-[#0d0d14] to-[#0a0a0f]" />
       
       {/* Subtle cyan accent in top right */}
-      <div className="absolute top-0 right-0 w-1/2 h-1/2 bg-gradient-radial from-[#00e5ff]/5 via-transparent to-transparent" />
+      <div
+        className="absolute top-0 right-0 h-1/2 w-1/2"
+        style={{ background: 'radial-gradient(circle at center, rgba(0,229,255,0.08) 0%, rgba(0,229,255,0) 70%)' }}
+      />
       
       {/* Subtle yellow accent in bottom left */}
-      <div className="absolute bottom-0 left-0 w-1/2 h-1/2 bg-gradient-radial from-[#fcee0a]/3 via-transparent to-transparent" />
+      <div
+        className="absolute bottom-0 left-0 h-1/2 w-1/2"
+        style={{ background: 'radial-gradient(circle at center, rgba(252,238,10,0.08) 0%, rgba(252,238,10,0) 72%)' }}
+      />
       
       {/* Very subtle red accent */}
-      <div className="absolute top-1/3 left-1/4 w-1/3 h-1/3 bg-gradient-radial from-[#ff003c]/3 via-transparent to-transparent blur-3xl" />
+      <div
+        className="absolute top-1/3 left-1/4 h-1/3 w-1/3 blur-3xl"
+        style={{ background: 'radial-gradient(circle at center, rgba(255,0,60,0.08) 0%, rgba(255,0,60,0) 70%)' }}
+      />
+
+      {/* Faint framing grid */}
+      <div className="absolute inset-0 cp-hud-grid opacity-20" />
       
       {/* Scanline overlay for CRT effect */}
       <div 

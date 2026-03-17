@@ -1,23 +1,23 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Mod } from '../../types';
-import ModCard from './ModCard';
+import ModCard, { SwipeSignal } from './ModCard';
 import { GlitchText } from '../UI/CyberComponents';
-import { XCircle, CheckCircle } from 'lucide-react';
+import { LoaderCircle, XCircle, CheckCircle } from 'lucide-react';
 
 interface CardStackProps {
   mods: Mod[];
   onApprove: (mod: Mod) => void;
   onReject: (mod: Mod) => void;
-  isLoading: boolean;
+  isRefreshing?: boolean;
   onQueueChange?: (remaining: number) => void;
   currentIndex: number;
   onIndexChange: (index: number) => void;
 }
 
-const CardStack: React.FC<CardStackProps> = ({ mods, onApprove, onReject, isLoading, onQueueChange, currentIndex, onIndexChange }) => {
+const CardStack: React.FC<CardStackProps> = ({ mods, onApprove, onReject, isRefreshing = false, onQueueChange, currentIndex, onIndexChange }) => {
   const [isAnimating, setIsAnimating] = useState(false);
-  const [exitDirection, setExitDirection] = useState<'left' | 'right' | null>(null);
+  const [swipeSignal, setSwipeSignal] = useState<SwipeSignal | null>(null);
   
   // Ref to prevent double-swipes
   const swipeInProgress = useRef(false);
@@ -25,58 +25,75 @@ const CardStack: React.FC<CardStackProps> = ({ mods, onApprove, onReject, isLoad
   // Reset animation state when component mounts (view switch)
   useEffect(() => {
     setIsAnimating(false);
-    setExitDirection(null);
+    setSwipeSignal(null);
     swipeInProgress.current = false;
   }, []);
 
+  useEffect(() => {
+    if (currentIndex >= mods.length) {
+      setIsAnimating(false);
+      setSwipeSignal(null);
+      swipeInProgress.current = false;
+    }
+  }, [currentIndex, mods.length]);
+
   // Report queue changes
   useEffect(() => {
-    const remaining = Math.max(0, mods.length - currentIndex);
+    const remaining = Math.max(0, mods.length - currentIndex - 1);
     onQueueChange?.(remaining);
   }, [currentIndex, mods.length, onQueueChange]);
 
   // Complete the swipe (called after animation or from drag)
-  const completeSwipe = useCallback((direction: 'left' | 'right') => {
-    if (currentIndex >= mods.length) return;
-
+  const completeSwipe = useCallback((direction: 'left' | 'right', modId: number) => {
     const currentMod = mods[currentIndex];
+    const resolvedMod = currentMod?.mod_id === modId ? currentMod : mods.find((mod) => mod.mod_id === modId);
+
+    if (!resolvedMod) {
+      setIsAnimating(false);
+      setSwipeSignal(null);
+      swipeInProgress.current = false;
+      return;
+    }
+
     if (direction === 'left') {
-      onReject(currentMod);
+      onReject(resolvedMod);
     } else {
-      onApprove(currentMod);
+      onApprove(resolvedMod);
     }
     
-    onIndexChange(currentIndex + 1);
+    onIndexChange(Math.min(currentIndex + 1, mods.length));
     setIsAnimating(false);
-    setExitDirection(null);
+    setSwipeSignal(null);
     swipeInProgress.current = false;
   }, [currentIndex, mods, onReject, onApprove, onIndexChange]);
 
   // Trigger a swipe animation (for keyboard/button use)
   const triggerSwipe = useCallback((direction: 'left' | 'right') => {
     if (isAnimating || currentIndex >= mods.length || swipeInProgress.current) return;
+
+    const currentMod = mods[currentIndex];
+    if (!currentMod) return;
     
     swipeInProgress.current = true;
     setIsAnimating(true);
-    setExitDirection(direction);
-    
-    // Complete the swipe after animation
-    setTimeout(() => {
-      completeSwipe(direction);
-    }, 300);
-  }, [currentIndex, mods.length, isAnimating, completeSwipe]);
+    setSwipeSignal({ direction, modId: currentMod.mod_id, nonce: Date.now() });
+  }, [currentIndex, mods, isAnimating]);
 
-  // Handle swipe from drag gesture (animation already handled in ModCard)
-  const handleSwipe = useCallback((direction: 'left' | 'right') => {
-    if (swipeInProgress.current) return;
+  // Handle swipe from drag gesture (animation handled in ModCard)
+  const handleSwipe = useCallback((direction: 'left' | 'right', modId: number) => {
     swipeInProgress.current = true;
-    completeSwipe(direction);
+    completeSwipe(direction, modId);
   }, [completeSwipe]);
+
+  const handleSwipeStart = useCallback(() => {
+    swipeInProgress.current = true;
+    setIsAnimating(true);
+  }, []);
 
   // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (isLoading || isAnimating || currentIndex >= mods.length) return;
+      if (isAnimating || currentIndex >= mods.length) return;
       
       if (e.key.toLowerCase() === 'a' || e.key === 'ArrowLeft') {
         triggerSwipe('left');
@@ -86,25 +103,29 @@ const CardStack: React.FC<CardStackProps> = ({ mods, onApprove, onReject, isLoad
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, mods, isLoading, isAnimating, triggerSwipe]);
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[60vh] text-cp-yellow animate-pulse">
-        <div className="w-16 h-16 border-4 border-t-cp-cyan border-r-cp-yellow border-b-cp-red border-l-transparent rounded-full animate-spin mb-4" />
-        <GlitchText text="JACKING IN..." className="text-2xl font-mono tracking-widest" />
-      </div>
-    );
-  }
+  }, [currentIndex, mods, isAnimating, triggerSwipe]);
 
   if (currentIndex >= mods.length) {
     return (
       <div className="flex flex-col items-center justify-center text-center max-w-md mx-auto p-8 bg-cp-dark/80 border border-cp-gray backdrop-blur-md cp-clip-box">
-        <div className="text-6xl mb-4">🏁</div>
-        <h2 className="text-3xl font-bold text-white mb-2 font-sans uppercase">Queue Depleted</h2>
-        <p className="text-cp-cyan font-mono mb-4">You have swiped through the current batch.</p>
-        <p className="text-gray-500 font-mono text-sm animate-pulse">Loading more mods automatically...</p>
-        <p className="text-[10px] text-gray-600 mt-4 font-mono">Or use the refresh button in the header</p>
+        {isRefreshing ? (
+          <>
+            <div className="relative mb-6 flex h-20 w-20 items-center justify-center rounded-full border border-cp-cyan/40 bg-black/50">
+              <div className="absolute inset-0 rounded-full border border-cp-yellow/20 animate-spin" style={{ animationDuration: '2.8s' }} />
+              <LoaderCircle className="h-8 w-8 animate-spin text-cp-cyan" />
+            </div>
+            <GlitchText active text="JACKING IN..." className="mb-3 text-3xl font-black uppercase tracking-[0.24em] text-white" />
+            <p className="mb-2 font-mono text-cp-cyan">Rebuilding your queue from the Nexus uplink.</p>
+            <p className="text-sm font-mono text-gray-500">Hold tight - fresh cards are being assembled.</p>
+          </>
+        ) : (
+          <>
+            <div className="text-6xl mb-4">🏁</div>
+            <h2 className="text-3xl font-bold text-white mb-2 font-sans uppercase">Queue Depleted</h2>
+            <p className="text-cp-cyan font-mono mb-4">You have swiped through the current batch.</p>
+            <p className="text-gray-500 font-mono text-sm animate-pulse">Use the refresh button to build a new stack.</p>
+          </>
+        )}
       </div>
     );
   }
@@ -125,9 +146,9 @@ const CardStack: React.FC<CardStackProps> = ({ mods, onApprove, onReject, isLoad
                 key={mod.mod_id}
                 mod={mod}
                 onSwipe={handleSwipe}
+                onSwipeStart={handleSwipeStart}
                 drag={isTop && !isAnimating}
-                isExiting={isCurrentCard && isAnimating}
-                exitDirection={isCurrentCard ? exitDirection : null}
+                swipeSignal={isCurrentCard ? swipeSignal : null}
                 style={{
                   zIndex: isTop ? 50 : 10,
                   scale: isTop ? 1 : 0.95,

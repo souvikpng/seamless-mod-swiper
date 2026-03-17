@@ -4,10 +4,11 @@ import { CyberButton, GlitchText, Panel } from './UI/CyberComponents';
 import { Cpu, ShieldCheck } from 'lucide-react';
 
 interface LandingPageProps {
-  onStart: (apiKey: string, game: Game) => void;
+  onStart: (apiKey: string, game: Game) => void | Promise<void>;
+  error?: string | null;
 }
 
-const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
+const LandingPage: React.FC<LandingPageProps> = ({ onStart, error }) => {
   const [key, setKey] = useState('');
   const [game, setGame] = useState<Game>(Game.CYBERPUNK);
 
@@ -67,6 +68,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
                 value={key}
                 onChange={(e) => setKey(e.target.value)}
                 placeholder="ENTER API KEY"
+                autoComplete="off"
+                required
                 className="w-full bg-cp-dark border-b-2 border-gray-700 p-4 text-white font-mono focus:outline-none focus:border-cp-cyan transition-colors placeholder-gray-800"
               />
               <div className="absolute right-4 top-4 text-gray-700 group-focus-within:text-cp-cyan transition-colors">
@@ -76,6 +79,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
             <p className="text-[10px] text-gray-500 font-mono pl-1">
               * Keys are processed in volatile memory only. No server storage.
             </p>
+            {error && (
+              <div className="border border-cp-red/50 bg-cp-red/10 px-3 py-2 text-xs font-mono text-cp-red">
+                {error}
+              </div>
+            )}
           </div>
 
           <div className="pt-4 flex justify-center">
@@ -83,6 +91,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
               label="Initialize Connection" 
               subLabel="Establish Uplink"
               type="submit"
+              disabled={!key.trim()}
               className="w-full md:w-auto min-w-[200px]"
             />
           </div>

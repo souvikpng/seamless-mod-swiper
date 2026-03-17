@@ -174,8 +174,9 @@ export const appendToCachedMods = async (game: Game, newMods: Mod[]): Promise<nu
     });
 
     // Now open write transaction and synchronously put new mods (no awaits)
-    const writeTx = db.transaction(MODS_STORE, 'readwrite');
+    const writeTx = db.transaction([MODS_STORE, META_STORE], 'readwrite');
     const writeStore = writeTx.objectStore(MODS_STORE);
+    const metaStore = writeTx.objectStore(META_STORE);
     
     let addedCount = 0;
     const timestamp = Date.now();
@@ -193,6 +194,13 @@ export const appendToCachedMods = async (game: Game, newMods: Mod[]): Promise<nu
         });
         addedCount++;
       }
+    }
+
+    if (addedCount > 0) {
+      metaStore.put({
+        key: `lastUpdate_${game}`,
+        timestamp,
+      });
     }
 
     return new Promise((resolve, reject) => {
@@ -285,6 +293,7 @@ export const clearModCache = async (game: Game): Promise<void> => {
     });
   } catch (e) {
     console.error('Failed to clear mod cache:', e);
+    throw e;
   }
 };
 
@@ -307,6 +316,7 @@ export const clearAllModCaches = async (): Promise<void> => {
     });
   } catch (e) {
     console.error('Failed to clear all caches:', e);
+    throw e;
   }
 };
 
