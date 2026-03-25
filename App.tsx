@@ -5,16 +5,19 @@ import CardStack from './components/Swiper/CardStack';
 import BootSequence from './components/UI/BootSequence';
 import { CyberButton, Panel, GlitchText } from './components/UI/CyberComponents';
 import { Mod, Game } from './types';
-import { fetchModsBulk, validateApiKey, RateLimitInfo, FetchProgress } from './services/nexusService';
+import { fetchModsBulk, fetchModDetail, validateApiKey, RateLimitInfo, FetchProgress } from './services/nexusService';
 import { 
   getCachedMods, 
   appendToCachedMods,
+  setCachedMods,
   filterUnseenMods, 
   getCacheAge,
   clearModCache,
   getUnseenCachedMods,
   getCachedModCount
 } from './services/cacheService';
+import { clearLegacyProgress, clearProgressForGame, loadProgressForGame, saveProgressForGame } from './services/progressService';
+import { FALLBACK_IMAGE_URL, getModAuthorName, getModBodyText, getModExcerpt, needsDescriptionHydration } from './utils/modPresentation';
 import { Download, List, LogOut, Zap, Trash2, Database, Settings, RotateCcw, RefreshCw } from 'lucide-react';
 
 interface LoadOptions {
@@ -25,11 +28,25 @@ interface LoadOptions {
   count?: number;
 }
 
+interface SwipeHistoryEntry {
+  mod: Mod;
+  direction: 'left' | 'right';
+  index: number;
+  wasApproved: boolean;
+}
+
+interface UndoSignal {
+  mod: Mod;
+  direction: 'left' | 'right';
+  nonce: number;
+}
+
 // Configuration
 const TARGET_BULK_FETCH_COUNT = 300; // Target mods to fetch per full preload
 const LOW_QUEUE_THRESHOLD = 20; // Auto-refresh when queue drops below this
 const AUTO_REFRESH_COOLDOWN = 60000; // Minimum time between auto-refreshes (ms)
 const BACKGROUND_FETCH_COUNT = 120; // Background fetch target while swiping
+const HISTORY_LIMIT = 40;
 
 const dedupeMods = (entries: Mod[]) => Array.from(new Map(entries.map((mod) => [mod.mod_id, mod])).values());
 
@@ -42,13 +59,26 @@ const getRateLimitSeverity = (rateLimit: RateLimitInfo | null) => {
   return 'normal';
 };
 
+const getInitialProgress = (game: Game) => {
+  if (typeof window === 'undefined') {
+    return { progress: { seenIds: [], approvedMods: [] }, migratedLegacy: false };
+  }
+
+  return loadProgressForGame(game);
+};
+
 const App: React.FC = () => {
+  const initialProgressRef = useRef<ReturnType<typeof getInitialProgress> | null>(null);
+  if (!initialProgressRef.current) {
+    initialProgressRef.current = getInitialProgress(Game.CYBERPUNK);
+  }
+  const initialProgress = initialProgressRef.current;
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [selectedGame, setSelectedGame] = useState<Game>(Game.CYBERPUNK);
   
   const [mods, setMods] = useState<Mod[]>([]);
-  const [approvedMods, setApprovedMods] = useState<Mod[]>([]);
-  const [seenModIds, setSeenModIds] = useState<Set<number>>(new Set());
+  const [approvedMods, setApprovedMods] = useState<Mod[]>(initialProgress.progress.approvedMods);
+  const [seenModIds, setSeenModIds] = useState<Set<number>>(new Set(initialProgress.progress.seenIds));
   
   const [isLoading, setIsLoading] = useState(false);
   const [isBulkLoading, setIsBulkLoading] = useState(false);
@@ -63,44 +93,70 @@ const App: React.FC = () => {
   const [cachedCount, setCachedCount] = useState(0);
   const [cacheAge, setCacheAge] = useState<number | null>(null);
   const [currentModIndex, setCurrentModIndex] = useState(0);
+  const [hydratedProgressGame, setHydratedProgressGame] = useState<Game | null>(null);
+  const [swipeHistory, setSwipeHistory] = useState<SwipeHistoryEntry[]>([]);
+  const [undoSignal, setUndoSignal] = useState<UndoSignal | null>(null);
+  const [introNonce, setIntroNonce] = useState(0);
+  const [swipePhase, setSwipePhase] = useState<'boot' | 'intro' | 'ready'>('ready');
   
   const settingsRef = useRef<HTMLDivElement>(null);
   const lastAutoRefresh = useRef<number>(0);
   const isAutoRefreshing = useRef<boolean>(false);
   const seenModIdsRef = useRef<Set<number>>(seenModIds);
   const modsRef = useRef<Mod[]>(mods);
+  const requestTokenRef = useRef(0);
+  const detailHydrationRef = useRef<Set<string>>(new Set());
 
-  // Initialization: Load persistence from localStorage
+  const queueDeckIntro = useCallback(() => {
+    setSwipePhase('intro');
+    setIntroNonce((prev) => prev + 1);
+  }, []);
+
+  const resetDeckSessionState = useCallback(() => {
+    setSwipeHistory([]);
+    setUndoSignal(null);
+  }, []);
+
   useEffect(() => {
-    const savedSeen = localStorage.getItem('seenModIds');
-    if (savedSeen) {
-      try {
-        setSeenModIds(new Set(JSON.parse(savedSeen)));
-      } catch (e) {
-        console.error('Failed to parse seenModIds from localStorage:', e);
-      }
-    }
-    
-    const savedApproved = localStorage.getItem('approvedMods');
-    if (savedApproved) {
-      try {
-        setApprovedMods(JSON.parse(savedApproved));
-      } catch (e) {
-        console.error('Failed to parse approvedMods from localStorage:', e);
-      }
+    if (initialProgress.migratedLegacy) {
+      saveProgressForGame(Game.CYBERPUNK, initialProgress.progress);
+      clearLegacyProgress();
     }
   }, []);
 
-  // Save seenModIds to localStorage on change and keep ref in sync
+  useEffect(() => {
+    const { progress, migratedLegacy } = loadProgressForGame(selectedGame);
+    const seenSet = new Set(progress.seenIds);
+
+    setSeenModIds(seenSet);
+    seenModIdsRef.current = seenSet;
+    setApprovedMods(progress.approvedMods);
+    setHydratedProgressGame(selectedGame);
+    setCurrentModIndex(0);
+    setQueueRemaining(0);
+    detailHydrationRef.current.clear();
+    resetDeckSessionState();
+
+    if (migratedLegacy) {
+      saveProgressForGame(selectedGame, progress);
+      clearLegacyProgress();
+    }
+  }, [resetDeckSessionState, selectedGame]);
+
   useEffect(() => {
     seenModIdsRef.current = seenModIds;
-    localStorage.setItem('seenModIds', JSON.stringify(Array.from(seenModIds)));
   }, [seenModIds]);
 
-  // Save approvedMods to localStorage on change
   useEffect(() => {
-    localStorage.setItem('approvedMods', JSON.stringify(approvedMods));
-  }, [approvedMods]);
+    if (hydratedProgressGame !== selectedGame) {
+      return;
+    }
+
+    saveProgressForGame(selectedGame, {
+      seenIds: Array.from(seenModIds),
+      approvedMods,
+    });
+  }, [approvedMods, hydratedProgressGame, seenModIds, selectedGame]);
 
   useEffect(() => {
     modsRef.current = mods;
@@ -139,6 +195,52 @@ const App: React.FC = () => {
 
     return () => clearInterval(interval);
   }, [selectedGame, updateCacheStats]);
+
+  useEffect(() => {
+    if (!apiKey || view !== 'swiping' || mods.length === 0) {
+      return;
+    }
+
+    let isCancelled = false;
+    const candidates = mods.slice(currentModIndex, currentModIndex + 2).filter((mod) => needsDescriptionHydration(mod));
+
+    candidates.forEach((mod) => {
+      const hydrateKey = `${selectedGame}_${mod.mod_id}`;
+      if (detailHydrationRef.current.has(hydrateKey)) {
+        return;
+      }
+
+      detailHydrationRef.current.add(hydrateKey);
+
+      fetchModDetail(apiKey, selectedGame, mod.mod_id)
+        .then(async ({ mod: detailedMod, rateLimit: detailRateLimit }) => {
+          if (!detailedMod || isCancelled) {
+            return;
+          }
+
+          if (detailRateLimit) {
+            setRateLimit(detailRateLimit);
+          }
+
+          setMods((prev) => prev.map((entry) => (entry.mod_id === detailedMod.mod_id ? { ...entry, ...detailedMod } : entry)));
+          setApprovedMods((prev) => prev.map((entry) => (entry.mod_id === detailedMod.mod_id ? { ...entry, ...detailedMod } : entry)));
+
+          try {
+            await setCachedMods(selectedGame, [detailedMod]);
+          } catch (cacheError) {
+            console.warn('Failed to cache hydrated mod details:', cacheError);
+          }
+        })
+        .catch((hydrateError) => {
+          detailHydrationRef.current.delete(hydrateKey);
+          console.warn('Failed to hydrate mod description:', hydrateError);
+        });
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [apiKey, currentModIndex, mods, selectedGame, view]);
 
   // Auto-refresh when queue runs low
   useEffect(() => {
@@ -209,6 +311,7 @@ const App: React.FC = () => {
     } = options;
 
     const normalizedKey = key.trim();
+    const requestToken = ++requestTokenRef.current;
 
     if (!normalizedKey) {
       const message = 'Enter your Nexus Mods API key to begin.';
@@ -218,6 +321,7 @@ const App: React.FC = () => {
 
     if (showBootSequence) {
       setIsLoading(true);
+      setSwipePhase('boot');
     }
 
     setIsBulkLoading(true);
@@ -248,13 +352,25 @@ const App: React.FC = () => {
       const cachedMods = await getCachedMods(game);
       const unseenCached = filterUnseenMods(cachedMods, currentSeenIds);
       const queuedIds = new Set(modsRef.current.map((mod) => mod.mod_id));
+
+      if (requestTokenRef.current !== requestToken) {
+        return;
+      }
       
       if (replaceQueue && unseenCached.length >= Math.floor(count / 2)) {
         // Use cache if we have a good amount
         console.log(`Using ${unseenCached.length} unseen mods from cache`);
+        resetDeckSessionState();
         setMods(unseenCached);
         setCurrentModIndex(0); // Reset to start for new batch
         await updateCacheStats(game);
+
+        if (showBootSequence && unseenCached.length > 0) {
+          queueDeckIntro();
+        } else if (replaceQueue) {
+          setSwipePhase('ready');
+        }
+
         return;
       }
 
@@ -273,6 +389,10 @@ const App: React.FC = () => {
         (progress) => setLoadProgress(progress),
         excludeIds
       );
+
+      if (requestTokenRef.current !== requestToken) {
+        return;
+      }
 
       // Update rate limit
       if (response.rateLimit) {
@@ -294,8 +414,15 @@ const App: React.FC = () => {
       if (replaceQueue) {
         // Also include unseen from cache
         const uniqueUnseen = dedupeMods([...unseenCached, ...unseenMods]);
+        resetDeckSessionState();
         setMods(uniqueUnseen);
         setCurrentModIndex(0); // Reset to start for new batch
+
+        if (showBootSequence && uniqueUnseen.length > 0) {
+          queueDeckIntro();
+        } else {
+          setSwipePhase('ready');
+        }
       } else {
         // Background refresh: append to existing queue without disturbing the active card
         const refillPool = dedupeMods([...unseenCached.slice(0, LOW_QUEUE_THRESHOLD), ...unseenMods]);
@@ -311,9 +438,14 @@ const App: React.FC = () => {
 
       if (replaceQueue && unseenMods.length === 0 && unseenCached.length === 0) {
         setError("No new mods found. You may have seen most available mods!");
+        setSwipePhase('ready');
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to fetch mods. Check console.";
+
+      if (requestTokenRef.current !== requestToken) {
+        return;
+      }
 
       if (validateKey && !validationComplete) {
         setLandingError(message);
@@ -325,15 +457,23 @@ const App: React.FC = () => {
         setError(message);
       }
 
+      if (replaceQueue) {
+        setSwipePhase('ready');
+      }
+
       console.error("Failed to fetch mods:", err);
     } finally {
+      if (requestTokenRef.current !== requestToken) {
+        return;
+      }
+
       if (showBootSequence) {
         setIsLoading(false);
       }
       setIsBulkLoading(false);
       setLoadProgress(null);
     }
-  }, [updateCacheStats]);
+  }, [queueDeckIntro, resetDeckSessionState, updateCacheStats]);
 
   const handleStart = async (key: string, game: Game) => {
     const normalizedKey = key.trim();
@@ -346,9 +486,13 @@ const App: React.FC = () => {
     setLandingError(null);
     setApiKey(normalizedKey);
     setSelectedGame(game);
+    setSwipePhase('boot');
     setView('swiping');
     setMods([]);
     setCurrentModIndex(0);
+    detailHydrationRef.current.clear();
+    resetDeckSessionState();
+    setQueueRemaining(0);
     await loadModsBulk(normalizedKey, game, {
       replaceQueue: true,
       validateKey: true,
@@ -358,13 +502,53 @@ const App: React.FC = () => {
   };
 
   const handleApprove = (mod: Mod) => {
+    const wasAlreadyApproved = approvedMods.some((entry) => entry.mod_id === mod.mod_id);
+
+    setSwipeHistory((prev) => [
+      ...prev.slice(-(HISTORY_LIMIT - 1)),
+      { mod, direction: 'right', index: currentModIndex, wasApproved: !wasAlreadyApproved },
+    ]);
     setApprovedMods(prev => prev.some((entry) => entry.mod_id === mod.mod_id) ? prev : [...prev, mod]);
     setSeenModIds(prev => new Set(prev).add(mod.mod_id));
   };
 
   const handleReject = (mod: Mod) => {
+    setSwipeHistory((prev) => [
+      ...prev.slice(-(HISTORY_LIMIT - 1)),
+      { mod, direction: 'left', index: currentModIndex, wasApproved: false },
+    ]);
     setSeenModIds(prev => new Set(prev).add(mod.mod_id));
   };
+
+  const handleUndo = () => {
+    if (swipePhase !== 'ready') {
+      return;
+    }
+
+    const lastSwipe = swipeHistory[swipeHistory.length - 1];
+    if (!lastSwipe) {
+      return;
+    }
+
+    setSwipeHistory((prev) => prev.slice(0, -1));
+    setSeenModIds((prev) => {
+      const next = new Set(prev);
+      next.delete(lastSwipe.mod.mod_id);
+      return next;
+    });
+
+    if (lastSwipe.wasApproved) {
+      setApprovedMods((prev) => prev.filter((entry) => entry.mod_id !== lastSwipe.mod.mod_id));
+    }
+
+    setCurrentModIndex(Math.max(lastSwipe.index, 0));
+    setUndoSignal({ mod: lastSwipe.mod, direction: lastSwipe.direction, nonce: Date.now() });
+    setError(null);
+  };
+
+  const handleIntroComplete = useCallback(() => {
+    setSwipePhase('ready');
+  }, []);
 
   const handleRemoveApproved = (modId: number) => {
     setApprovedMods(prev => prev.filter(m => m.mod_id !== modId));
@@ -385,6 +569,8 @@ const App: React.FC = () => {
   };
 
   const handleResetProgress = async () => {
+    requestTokenRef.current += 1;
+
     try {
       await clearModCache(selectedGame);
     } catch (err) {
@@ -396,12 +582,15 @@ const App: React.FC = () => {
       setApprovedMods([]);
       setMods([]);
       setCurrentModIndex(0);
-      localStorage.removeItem('seenModIds');
-      localStorage.removeItem('approvedMods');
+      detailHydrationRef.current.clear();
+      clearProgressForGame(selectedGame);
+      resetDeckSessionState();
+      setSwipePhase('ready');
       setShowResetConfirm(false);
       setShowSettings(false);
       setCachedCount(0);
       setCacheAge(null);
+      setQueueRemaining(0);
       // Reload mods
       if (apiKey) {
         loadModsBulk(apiKey, selectedGame, {
@@ -423,6 +612,8 @@ const App: React.FC = () => {
   const backgroundProgressPercent = loadProgress && loadProgress.total > 0
     ? Math.min((loadProgress.current / loadProgress.total) * 100, 100)
     : 0;
+  const canUndo = swipeHistory.length > 0 && swipePhase === 'ready';
+  const isIntroPlaying = swipePhase === 'intro';
 
   return (
     <div className="relative min-h-screen text-white font-sans overflow-hidden">
@@ -497,12 +688,12 @@ const App: React.FC = () => {
                   >
                     <RotateCcw size={16} />
                     <span className="text-sm">Reset Progress</span>
-                  </button>
-                  <p className="text-[10px] text-gray-600 mt-2 px-2">
-                    Clears all seen mods and approved list
-                  </p>
-                </div>
-              )}
+                   </button>
+                   <p className="text-[10px] text-gray-600 mt-2 px-2">
+                     Clears seen mods and approved list for this game
+                   </p>
+                 </div>
+               )}
             </div>
 
             {/* Approved List Button */}
@@ -522,18 +713,23 @@ const App: React.FC = () => {
             </button>
 
             {/* Logout Button */}
-             <button 
-              type="button"
-              onClick={() => {
-                setApiKey(null);
-                setError(null);
-                setLandingError(null);
-                setIsLoading(false);
-                setIsBulkLoading(false);
-                setLoadProgress(null);
-                setView('landing');
-                setShowSettings(false);
-              }}
+              <button 
+                type="button"
+                onClick={() => {
+                  requestTokenRef.current += 1;
+                  setApiKey(null);
+                  setError(null);
+                  setLandingError(null);
+                  setIsLoading(false);
+                  setIsBulkLoading(false);
+                  setLoadProgress(null);
+                  setSwipePhase('ready');
+                  detailHydrationRef.current.clear();
+                  resetDeckSessionState();
+                  setQueueRemaining(0);
+                  setView('landing');
+                  setShowSettings(false);
+                }}
               className="bg-black/50 border border-red-500 p-2 text-red-500 hover:bg-red-500 hover:text-white transition-colors"
             >
               <LogOut size={20} />
@@ -579,28 +775,39 @@ const App: React.FC = () => {
                 </div>
               )}
               
-             <CardStack 
+              <CardStack 
                  mods={mods} 
-                 onApprove={handleApprove} 
-                 onReject={handleReject} 
-                 isRefreshing={isBulkLoading && !isLoading}
-                 onQueueChange={setQueueRemaining}
-                 currentIndex={currentModIndex}
-                 onIndexChange={setCurrentModIndex}
-               />
-             
-             {/* Controls info - positioned at bottom with no overlap */}
-             <div className="mt-4 text-center text-[10px] text-gray-600 font-mono">
-               <span className="text-gray-500">[A] REJECT</span>
-                <span className="mx-4 text-gray-700">|</span>
-                <span className="text-gray-500">[D] APPROVE</span>
-                {queueRemaining > 0 && (
-                  <span className="ml-4 text-cp-cyan">({queueRemaining} buffered)</span>
-                )}
-                {isBulkLoading && !isLoading && (
-                  <span className="ml-4 text-cp-yellow animate-pulse">(refreshing buffer...)</span>
-                )}
-              </div>
+                  onApprove={handleApprove} 
+                  onReject={handleReject} 
+                  isRefreshing={isBulkLoading && !isLoading}
+                  onQueueChange={setQueueRemaining}
+                  currentIndex={currentModIndex}
+                  onIndexChange={setCurrentModIndex}
+                  canUndo={canUndo}
+                  onUndo={handleUndo}
+                  undoSignal={undoSignal}
+                  isIntroPlaying={isIntroPlaying}
+                  introNonce={introNonce}
+                  onIntroComplete={handleIntroComplete}
+                />
+              
+              {/* Controls info - positioned at bottom with no overlap */}
+              <div className="mt-4 text-center text-[10px] text-gray-600 font-mono">
+                <span className="text-gray-500">[A] REJECT</span>
+                 <span className="mx-4 text-gray-700">|</span>
+                 <span className="text-gray-500">[D] APPROVE</span>
+                 <span className="mx-4 text-gray-700">|</span>
+                 <span className="text-gray-500">[Z] UNDO</span>
+                 {queueRemaining > 0 && (
+                   <span className="ml-4 text-cp-cyan">({queueRemaining} buffered)</span>
+                 )}
+                 {isIntroPlaying && (
+                   <span className="ml-4 text-cp-yellow animate-pulse">(deck priming...)</span>
+                 )}
+                 {isBulkLoading && !isLoading && (
+                   <span className="ml-4 text-cp-yellow animate-pulse">(refreshing buffer...)</span>
+                 )}
+               </div>
            </div>
         )}
 
@@ -626,18 +833,18 @@ const App: React.FC = () => {
                   approvedMods.map((mod) => (
                     <div key={mod.mod_id} className="flex gap-4 p-4 border border-gray-800 bg-gray-900/50 hover:border-cp-cyan transition-colors group">
                       <img
-                        src={mod.picture_url || 'https://via.placeholder.com/600x400?text=No+Image'}
+                        src={mod.picture_url || FALLBACK_IMAGE_URL}
                         alt={mod.name || 'Mod artwork'}
                         onError={(event) => {
                           event.currentTarget.onerror = null;
-                          event.currentTarget.src = 'https://via.placeholder.com/600x400?text=No+Image';
+                          event.currentTarget.src = FALLBACK_IMAGE_URL;
                         }}
                         className="w-24 h-24 object-cover border border-gray-700 bg-black"
                       />
                       <div className="flex-1">
                         <h3 className="text-xl font-bold text-white group-hover:text-cp-cyan">{mod.name}</h3>
-                        <p className="text-sm text-gray-400 font-mono mb-2">{mod.author}</p>
-                        <p className="text-xs text-gray-500 line-clamp-2">{mod.summary}</p>
+                        <p className="text-sm text-gray-400 font-mono mb-2">{getModAuthorName(mod)}</p>
+                        <p className="text-xs text-gray-500 line-clamp-3">{getModExcerpt(mod, 240)}</p>
                       </div>
                       <div className="flex flex-col gap-2 self-center">
                         <a 
@@ -676,9 +883,9 @@ const App: React.FC = () => {
             <h3 className="text-cp-red font-bold text-lg mb-4 uppercase tracking-wider">
               Confirm Reset
             </h3>
-            <p className="text-gray-300 text-sm mb-6">
-              This will clear all your progress including:
-            </p>
+             <p className="text-gray-300 text-sm mb-6">
+               This will clear your progress for the active game, including:
+             </p>
             <ul className="text-gray-400 text-xs mb-6 space-y-1 ml-4">
               <li>- All seen mods ({seenModIds.size} mods)</li>
               <li>- Approved mods list ({approvedMods.length} mods)</li>

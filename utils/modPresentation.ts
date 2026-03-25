@@ -1,0 +1,80 @@
+import { Mod } from '../types';
+
+export const FALLBACK_IMAGE_URL = 'https://via.placeholder.com/600x400?text=No+Image';
+
+const decodeHtmlEntities = (value: string) => {
+  if (typeof DOMParser === 'undefined') {
+    return value
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>');
+  }
+
+  const parser = new DOMParser();
+  const parsed = parser.parseFromString(value, 'text/html');
+  return parsed.documentElement.textContent || '';
+};
+
+export const sanitizeModText = (value?: string) => {
+  if (!value) {
+    return '';
+  }
+
+  const prepared = value
+    .replace(/\[img\][\s\S]*?\[\/img\]/gi, ' ')
+    .replace(/\[url=([^\]]+)\]([\s\S]*?)\[\/url\]/gi, '$2')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '- ')
+    .replace(/<[^>]*>/g, ' ');
+
+  return decodeHtmlEntities(prepared)
+    .replace(/\[(?:\/?[a-z*]+(?:=[^\]]+)?)\]/gi, ' ')
+    .replace(/https?:\/\/\S+/gi, ' ')
+    .replace(/\r/g, '')
+    .replace(/\u00a0/g, ' ')
+    .replace(/\t+/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+};
+
+export const getModBodyText = (mod: Mod) => {
+  const description = sanitizeModText(mod.description);
+  const summary = sanitizeModText(mod.summary);
+
+  if (description && (!summary || description.length >= Math.max(140, summary.length * 0.75))) {
+    return description;
+  }
+
+  return summary || description || 'No summary provided.';
+};
+
+export const getModExcerpt = (mod: Mod, maxLength: number = 180) => {
+  const text = getModBodyText(mod);
+
+  if (text.length <= maxLength) {
+    return text;
+  }
+
+  return `${text.slice(0, maxLength).trimEnd()}...`;
+};
+
+export const getModAuthorName = (mod: Mod) => mod.author || mod.uploaded_by || 'Unknown';
+
+export const needsDescriptionHydration = (mod: Mod) => {
+  const description = sanitizeModText(mod.description);
+  const summary = sanitizeModText(mod.summary);
+
+  if (!description) {
+    return true;
+  }
+
+  return summary.length > description.length && description.length < 220;
+};

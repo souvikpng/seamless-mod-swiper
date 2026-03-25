@@ -218,6 +218,18 @@ const fetchFromListEndpoint = async (
   return { mods, rateLimit };
 };
 
+export const fetchModDetail = async (
+  apiKey: string,
+  game: Game,
+  modId: number
+): Promise<{ mod: Mod | null; rateLimit: RateLimitInfo | null }> => {
+  if (!apiKey.trim()) {
+    throw new Error('A Nexus Mods API key is required to load mods.');
+  }
+
+  return fetchModDetails(apiKey, game, modId);
+};
+
 /**
  * Bulk fetch mods with progress reporting
  * 
