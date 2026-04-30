@@ -1,5 +1,3 @@
-Disclaimer: Readme is outdated, but the general functionality is the same. Will update later.
-
 # Seamless Mod Swiper
 
 Tinder'esque Application to Help Catalogue Your Mod List.
@@ -40,27 +38,9 @@ I know nothing about programming, and as such the code has been written entirely
 
 **Data & Persistence**
 
-* Approved mods and settings persist between sessions.
-* Desktop: Files stored next to executable with integrity checks.
-* Export/Import to JSON available.
-* **API key never stored or persisted**.
-* No telemetry.
-
-## Security Notes
-
 * The Nexus Mods API key is kept in memory only and is not persisted.
-* The app stores approved/seen mod metadata locally in browser storage.
+* Approved and seen mod metadata persist locally in browser storage.
+* Approved mods can be exported to a text file.
 * Fonts are self-hosted through local package assets to preserve the look without third-party runtime requests.
 * Remote mod images are restricted to known Nexus Mods image hosts and use `no-referrer` requests.
-* Do not run `npm run dev:lan` on untrusted networks.
-* Production builds should be served over HTTPS with the CSP in `index.html`; a response header is preferable when the host supports it.
-* The CSP still allows inline styles because the current React animation/UI layer uses style attributes; avoid introducing raw HTML sinks or remote scripts.
-* If CDN-hosted scripts or styles are introduced later, require SRI and a CSP update in the same change.
-
-**License**
-
-Idk about licenses and stuff go nuts its open source.
-
-**Contributing**
-
-Contributions welcome! Please open issues for bugs or feature requests.
+* No telemetry.
