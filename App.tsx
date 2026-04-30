@@ -17,7 +17,7 @@ import {
   getCachedModCount
 } from './services/cacheService';
 import { clearLegacyProgress, clearProgressForGame, loadProgressForGame, saveProgressForGame } from './services/progressService';
-import { FALLBACK_IMAGE_URL, getModAuthorName, getModBodyText, getModExcerpt, needsDescriptionHydration } from './utils/modPresentation';
+import { FALLBACK_IMAGE_URL, getModAuthorName, getModBodyText, getModExcerpt, needsDescriptionHydration, safeImageUrl } from './utils/modPresentation';
 import { Download, List, LogOut, Zap, Trash2, Database, Settings, RotateCcw, RefreshCw } from 'lucide-react';
 
 interface LoadOptions {
@@ -833,12 +833,13 @@ const App: React.FC = () => {
                   approvedMods.map((mod) => (
                     <div key={mod.mod_id} className="flex gap-4 p-4 border border-gray-800 bg-gray-900/50 hover:border-cp-cyan transition-colors group">
                       <img
-                        src={mod.picture_url || FALLBACK_IMAGE_URL}
+                        src={safeImageUrl(mod.picture_url)}
                         alt={mod.name || 'Mod artwork'}
                         onError={(event) => {
                           event.currentTarget.onerror = null;
                           event.currentTarget.src = FALLBACK_IMAGE_URL;
                         }}
+                        referrerPolicy="no-referrer"
                         className="w-24 h-24 object-cover border border-gray-700 bg-black"
                       />
                       <div className="flex-1">

@@ -46,6 +46,14 @@ I know nothing about programming, and as such the code has been written entirely
 * **API key never stored or persisted**.
 * No telemetry.
 
+## Security Notes
+
+* The Nexus Mods API key is kept in memory only and is not persisted.
+* The app stores approved/seen mod metadata locally in browser storage.
+* Fonts are self-hosted through local package assets to preserve the look without third-party runtime requests.
+* Do not run `npm run dev:lan` on untrusted networks.
+* Production builds should be served over HTTPS with the CSP in `index.html`; a response header is preferable when the host supports it.
+
 **License**
 
 Idk about licenses and stuff go nuts its open source.

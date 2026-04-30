@@ -4,7 +4,7 @@ import { Mod } from '../../types';
 import ModCard, { SwipeSignal } from './ModCard';
 import { GlitchText } from '../UI/CyberComponents';
 import { CheckCircle, LoaderCircle, Undo2, XCircle } from 'lucide-react';
-import { FALLBACK_IMAGE_URL, getModAuthorName } from '../../utils/modPresentation';
+import { FALLBACK_IMAGE_URL, getModAuthorName, safeImageUrl } from '../../utils/modPresentation';
 
 interface UndoAnimationSignal {
   mod: Mod;
@@ -54,7 +54,13 @@ const OUTGOING_SWIPE_DURATION_MS = 320;
 const preloadImage = (src?: string) => {
   if (!src) return;
   const image = new Image();
+  image.referrerPolicy = 'no-referrer';
   image.src = src;
+};
+
+const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
+  event.currentTarget.onerror = null;
+  event.currentTarget.src = FALLBACK_IMAGE_URL;
 };
 
 const CardBack: React.FC<{ accent?: 'yellow' | 'cyan'; className?: string }> = ({ accent = 'yellow', className = '' }) => {
@@ -125,7 +131,7 @@ const DeckIntroOverlay: React.FC<DeckIntroOverlayProps> = ({ active, mod }) => {
                 style={{ transformStyle: 'preserve-3d' }}
               >
                 <div className="absolute inset-0 overflow-hidden cp-clip-box border-l-4 border-cp-yellow border border-cp-cyan/20 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
-                  <img src={mod.picture_url || FALLBACK_IMAGE_URL} alt="" className="h-1/2 w-full object-cover opacity-70" draggable={false} />
+                  <img src={safeImageUrl(mod.picture_url)} alt="" onError={handleImageError} referrerPolicy="no-referrer" className="h-1/2 w-full object-cover opacity-70" draggable={false} />
                   <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-t from-black via-transparent to-black/10" />
                   <div className="absolute inset-x-5 top-[42%]">
                     <h3 className="line-clamp-2 text-3xl font-black uppercase leading-none tracking-tight text-white">{mod.name || 'Unknown Mod'}</h3>
@@ -162,7 +168,7 @@ const UndoRecallOverlay: React.FC<UndoRecallOverlayProps> = ({ mod }) => {
             className="absolute inset-0 overflow-hidden cp-clip-box border-l-4 border-cp-yellow border border-cp-cyan/20 bg-black"
             style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
           >
-            <img src={mod.picture_url || FALLBACK_IMAGE_URL} alt="" className="h-1/2 w-full object-cover opacity-60" draggable={false} />
+            <img src={safeImageUrl(mod.picture_url)} alt="" onError={handleImageError} referrerPolicy="no-referrer" className="h-1/2 w-full object-cover opacity-60" draggable={false} />
             <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-t from-black via-transparent to-black/20" />
             <div className="absolute inset-x-5 top-[42%]">
               <h3 className="line-clamp-2 text-3xl font-black uppercase leading-none tracking-tight text-white">{mod.name || 'Unknown Mod'}</h3>
@@ -190,7 +196,7 @@ const OutgoingSwipeOverlay: React.FC<OutgoingSwipeOverlayProps> = ({ swipe }) =>
       className="pointer-events-none absolute inset-0 z-[68]"
     >
       <div className="relative h-full w-full overflow-hidden cp-clip-box border-l-4 border-cp-yellow border border-cp-cyan/20 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
-        <img src={swipe.mod.picture_url || FALLBACK_IMAGE_URL} alt="" className="h-1/2 w-full object-cover opacity-75" draggable={false} />
+        <img src={safeImageUrl(swipe.mod.picture_url)} alt="" onError={handleImageError} referrerPolicy="no-referrer" className="h-1/2 w-full object-cover opacity-75" draggable={false} />
         <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-t from-black via-transparent to-black/10" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black" />
         <div className={`absolute inset-0 ${swipe.direction === 'right' ? 'bg-cp-cyan/16' : 'bg-cp-red/16'}`} />
@@ -278,7 +284,7 @@ const CardStack: React.FC<CardStackProps> = ({
   }, [currentIndex, mods.length, onQueueChange]);
 
   useEffect(() => {
-    mods.slice(currentIndex, currentIndex + 2).forEach((mod) => preloadImage(mod.picture_url || FALLBACK_IMAGE_URL));
+    mods.slice(currentIndex, currentIndex + 2).forEach((mod) => preloadImage(safeImageUrl(mod.picture_url)));
   }, [currentIndex, mods]);
 
   const clearSwipeFlagNextFrame = () => {

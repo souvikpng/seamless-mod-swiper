@@ -3,7 +3,7 @@ import { motion, useMotionValue, useTransform, PanInfo, animate, AnimationPlayba
 import { Mod } from '../../types';
 import { Panel } from '../UI/CyberComponents';
 import { ThumbsUp, User, Calendar } from 'lucide-react';
-import { FALLBACK_IMAGE_URL, getModAuthorName, getModBodyText } from '../../utils/modPresentation';
+import { FALLBACK_IMAGE_URL, getModAuthorName, getModBodyText, safeImageUrl } from '../../utils/modPresentation';
 
 export interface SwipeSignal {
   direction: 'left' | 'right';
@@ -39,10 +39,11 @@ const ModCard: React.FC<ModCardProps> = ({ mod, onSwipe, style, drag, swipeSigna
   const rejectOpacity = useTransform(x, [-150, -40], [0.7, 0]);
   const animationRef = useRef<AnimationPlaybackControls | null>(null);
   const isDismissingRef = useRef(false);
+  const modImageUrl = safeImageUrl(mod.picture_url);
 
   useEffect(() => {
-    preloadImage(mod.picture_url || FALLBACK_IMAGE_URL);
-  }, [mod.picture_url]);
+    preloadImage(modImageUrl);
+  }, [modImageUrl]);
 
   const triggerSwipe = useCallback((direction: 'left' | 'right') => {
     if (isDismissingRef.current) return;
@@ -109,12 +110,13 @@ const ModCard: React.FC<ModCardProps> = ({ mod, onSwipe, style, drag, swipeSigna
         <Panel className="h-full overflow-hidden border border-cp-cyan/15 bg-black/65 p-0 select-none shadow-[0_18px_60px_rgba(0,0,0,0.35)]">
           <div className="absolute inset-0">
             <img
-              src={mod.picture_url || FALLBACK_IMAGE_URL}
+              src={modImageUrl}
               alt=""
               onError={(event) => {
                 event.currentTarget.onerror = null;
                 event.currentTarget.src = FALLBACK_IMAGE_URL;
               }}
+              referrerPolicy="no-referrer"
               loading="eager"
               decoding="async"
               className="h-full w-full scale-105 object-cover opacity-38"
@@ -163,12 +165,13 @@ const ModCard: React.FC<ModCardProps> = ({ mod, onSwipe, style, drag, swipeSigna
 
           <div className="relative h-1/2 w-full overflow-hidden group">
             <img
-              src={mod.picture_url || FALLBACK_IMAGE_URL}
+              src={modImageUrl}
               alt={mod.name}
               onError={(event) => {
                 event.currentTarget.onerror = null;
                 event.currentTarget.src = FALLBACK_IMAGE_URL;
               }}
+              referrerPolicy="no-referrer"
               loading="eager"
               decoding="async"
               className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110 pointer-events-none"

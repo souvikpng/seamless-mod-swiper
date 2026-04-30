@@ -2,6 +2,23 @@ import { Mod } from '../types';
 
 export const FALLBACK_IMAGE_URL = 'https://via.placeholder.com/600x400?text=No+Image';
 
+export const safeImageUrl = (value?: string, fallback = FALLBACK_IMAGE_URL): string => {
+  if (!value) {
+    return fallback;
+  }
+
+  try {
+    const url = new URL(value);
+    if (url.protocol === 'https:' || url.protocol === 'http:') {
+      return url.toString();
+    }
+  } catch {
+    // Invalid external image URLs fall back to a known placeholder.
+  }
+
+  return fallback;
+};
+
 const decodeHtmlEntities = (value: string) => {
   if (typeof DOMParser === 'undefined') {
     return value

@@ -1,4 +1,5 @@
-import { Game, Mod, UserProgress } from '../types';
+import { Game, UserProgress } from '../types';
+import { filterValidPersistedMods, filterValidSeenIds } from '../utils/validation';
 
 const LEGACY_SEEN_KEY = 'seenModIds';
 const LEGACY_APPROVED_KEY = 'approvedMods';
@@ -11,22 +12,16 @@ const emptyProgress = (): UserProgress => ({
   approvedMods: [],
 });
 
-const safeParse = <T>(value: string | null, fallback: T): T => {
+const safeParse = (value: string | null): unknown => {
   if (!value) {
-    return fallback;
+    return undefined;
   }
 
   try {
-    const parsed = JSON.parse(value) as T;
-
-    if (Array.isArray(fallback) && !Array.isArray(parsed)) {
-      return fallback;
-    }
-
-    return parsed;
+    return JSON.parse(value);
   } catch (error) {
-    console.error('Failed to parse persisted progress:', error);
-    return fallback;
+    console.warn('Discarding malformed persisted progress:', error);
+    return undefined;
   }
 };
 
@@ -37,8 +32,8 @@ export const loadProgressForGame = (game: Game): { progress: UserProgress; migra
   if (scopedSeen !== null || scopedApproved !== null) {
     return {
       progress: {
-        seenIds: safeParse<number[]>(scopedSeen, []),
-        approvedMods: safeParse<Mod[]>(scopedApproved, []),
+        seenIds: filterValidSeenIds(safeParse(scopedSeen)),
+        approvedMods: filterValidPersistedMods(safeParse(scopedApproved)),
       },
       migratedLegacy: false,
     };
@@ -50,8 +45,8 @@ export const loadProgressForGame = (game: Game): { progress: UserProgress; migra
   if (legacySeen !== null || legacyApproved !== null) {
     return {
       progress: {
-        seenIds: safeParse<number[]>(legacySeen, []),
-        approvedMods: safeParse<Mod[]>(legacyApproved, []),
+        seenIds: filterValidSeenIds(safeParse(legacySeen)),
+        approvedMods: filterValidPersistedMods(safeParse(legacyApproved)),
       },
       migratedLegacy: true,
     };

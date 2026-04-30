@@ -1,4 +1,5 @@
 import { Mod, Game } from '../types';
+import { filterValidPersistedMods, isValidPersistedMod } from '../utils/validation';
 
 /**
  * IndexedDB-based cache service for storing large amounts of mod data
@@ -125,6 +126,10 @@ export const setCachedMods = async (game: Game, mods: Mod[]): Promise<void> => {
 
     // Store each mod
     for (const mod of mods) {
+      if (!isValidPersistedMod(mod)) {
+        continue;
+      }
+
       const cacheKey = getModCacheKey(game, mod.mod_id);
       modsStore.put({
         cacheKey,
@@ -182,6 +187,10 @@ export const appendToCachedMods = async (game: Game, newMods: Mod[]): Promise<nu
     const timestamp = Date.now();
 
     for (const mod of newMods) {
+      if (!isValidPersistedMod(mod)) {
+        continue;
+      }
+
       const cacheKey = getModCacheKey(game, mod.mod_id);
       
       if (!existingKeys.has(cacheKey)) {
@@ -230,7 +239,10 @@ export const getCachedMods = async (game: Game): Promise<Mod[]> => {
       const request = index.getAll(game);
       request.onsuccess = () => {
         const entries = request.result || [];
-        const mods = entries.map((e: any) => e.data as Mod);
+        const mods = filterValidPersistedMods(entries.map((e: any) => e.data));
+        if (mods.length !== entries.length) {
+          console.warn('Discarded malformed cached mod entries.');
+        }
         console.log(`Cache hit for ${game}: ${mods.length} mods`);
         resolve(mods);
       };
@@ -411,10 +423,11 @@ export const getCachedModsSync = (game: Game): Mod[] | null => {
     const cached = localStorage.getItem(`sms_mod_cache_${game}`);
     if (cached) {
       const entry = JSON.parse(cached);
-      return entry.mods || null;
+      const mods = filterValidPersistedMods(entry.mods);
+      return mods.length > 0 ? mods : null;
     }
   } catch (e) {
-    // Ignore
+    console.warn('Discarding malformed legacy mod cache:', e);
   }
   return null;
 };
