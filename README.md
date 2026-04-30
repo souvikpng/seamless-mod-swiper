@@ -36,8 +36,6 @@ By design, these tasks are left up to the user.
 
 This application requires a Nexus Mods API key for functionality.
 
-I know nothing about programming, and as such the code has been written entirely by AI (at least for the time being). However, I'm confident about its functionality on top of it being a simple tool. No hard feelings if this is a dealbreaker, I suggest moving on. Expect this tool to be frequently refined and updated.
-
 **Data & Persistence**
 
 * The Nexus Mods API key is kept in memory only and is not persisted.
@@ -46,3 +44,7 @@ I know nothing about programming, and as such the code has been written entirely
 * Fonts are self-hosted through local package assets to preserve the look without third-party runtime requests.
 * Remote mod images are restricted to known Nexus Mods image hosts and use `no-referrer` requests.
 * No telemetry.
+
+**Contributing**
+
+Contributions welcome. Please open issues for bugs or feature requests.
