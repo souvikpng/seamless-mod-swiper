@@ -918,7 +918,7 @@ const App: React.FC = () => {
       )}
 
       {/* Decorative Overlay */}
-      <div className="fixed inset-0 pointer-events-none z-50 mix-blend-overlay opacity-20 bg-[url('https://grainy-gradients.vercel.app/noise.svg')]"></div>
+      <div className="fixed inset-0 pointer-events-none z-50 mix-blend-overlay opacity-20 cp-noise-soft"></div>
     </div>
   );
 };

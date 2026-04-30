@@ -51,8 +51,11 @@ I know nothing about programming, and as such the code has been written entirely
 * The Nexus Mods API key is kept in memory only and is not persisted.
 * The app stores approved/seen mod metadata locally in browser storage.
 * Fonts are self-hosted through local package assets to preserve the look without third-party runtime requests.
+* Remote mod images are restricted to known Nexus Mods image hosts and use `no-referrer` requests.
 * Do not run `npm run dev:lan` on untrusted networks.
 * Production builds should be served over HTTPS with the CSP in `index.html`; a response header is preferable when the host supports it.
+* The CSP still allows inline styles because the current React animation/UI layer uses style attributes; avoid introducing raw HTML sinks or remote scripts.
+* If CDN-hosted scripts or styles are introduced later, require SRI and a CSP update in the same change.
 
 **License**
 

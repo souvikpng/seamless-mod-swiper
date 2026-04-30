@@ -25,9 +25,26 @@ const safeParse = (value: string | null): unknown => {
   }
 };
 
+const safeGetItem = (key: string): string | null => {
+  try {
+    return localStorage.getItem(key);
+  } catch (error) {
+    console.warn('Unable to read persisted progress:', error);
+    return null;
+  }
+};
+
+const safeSetItem = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {
+    console.warn('Unable to save progress locally:', error);
+  }
+};
+
 export const loadProgressForGame = (game: Game): { progress: UserProgress; migratedLegacy: boolean } => {
-  const scopedSeen = localStorage.getItem(getSeenKey(game));
-  const scopedApproved = localStorage.getItem(getApprovedKey(game));
+  const scopedSeen = safeGetItem(getSeenKey(game));
+  const scopedApproved = safeGetItem(getApprovedKey(game));
 
   if (scopedSeen !== null || scopedApproved !== null) {
     return {
@@ -39,8 +56,8 @@ export const loadProgressForGame = (game: Game): { progress: UserProgress; migra
     };
   }
 
-  const legacySeen = localStorage.getItem(LEGACY_SEEN_KEY);
-  const legacyApproved = localStorage.getItem(LEGACY_APPROVED_KEY);
+  const legacySeen = safeGetItem(LEGACY_SEEN_KEY);
+  const legacyApproved = safeGetItem(LEGACY_APPROVED_KEY);
 
   if (legacySeen !== null || legacyApproved !== null) {
     return {
@@ -59,8 +76,8 @@ export const loadProgressForGame = (game: Game): { progress: UserProgress; migra
 };
 
 export const saveProgressForGame = (game: Game, progress: UserProgress) => {
-  localStorage.setItem(getSeenKey(game), JSON.stringify(progress.seenIds));
-  localStorage.setItem(getApprovedKey(game), JSON.stringify(progress.approvedMods));
+  safeSetItem(getSeenKey(game), JSON.stringify(progress.seenIds));
+  safeSetItem(getApprovedKey(game), JSON.stringify(progress.approvedMods));
 };
 
 export const clearProgressForGame = (game: Game) => {

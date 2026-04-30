@@ -1,6 +1,11 @@
 import { Mod } from '../types';
 
-export const FALLBACK_IMAGE_URL = 'https://via.placeholder.com/600x400?text=No+Image';
+export const FALLBACK_IMAGE_URL = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 600 400%22%3E%3Crect width=%22600%22 height=%22400%22 fill=%22%23050505%22/%3E%3Cpath d=%22M0 0h600v400H0z%22 fill=%22%230d0d0d%22/%3E%3Cg fill=%22none%22 stroke=%22%23fcee0a%22 stroke-width=%222%22 opacity=%22.55%22%3E%3Cpath d=%22M160 150h280v100H160z%22/%3E%3Cpath d=%22m160 250 80-70 60 45 55-50 85 75%22/%3E%3C/g%3E%3Ctext x=%22300%22 y=%22315%22 text-anchor=%22middle%22 fill=%22%23fcee0a%22 font-family=%22monospace%22 font-size=%2228%22%3ENO IMAGE%3C/text%3E%3C/svg%3E';
+
+const ALLOWED_IMAGE_HOSTS = new Set([
+  'staticdelivery.nexusmods.com',
+  'static.nexusmods.com',
+]);
 
 export const safeImageUrl = (value?: string, fallback = FALLBACK_IMAGE_URL): string => {
   if (!value) {
@@ -9,7 +14,7 @@ export const safeImageUrl = (value?: string, fallback = FALLBACK_IMAGE_URL): str
 
   try {
     const url = new URL(value);
-    if (url.protocol === 'https:' || url.protocol === 'http:') {
+    if (url.protocol === 'https:' && ALLOWED_IMAGE_HOSTS.has(url.hostname.toLowerCase())) {
       return url.toString();
     }
   } catch {
