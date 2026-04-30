@@ -20,7 +20,7 @@ The purpose of this tool is to help streamline the process of "choosing" mods. B
 
 **Supported Games & Data:**
 
-* Currently supports **Cyberpunk 2077** and **Red Dead Redemption 2**.
+* Currently supports **Cyberpunk 2077**.
 * Mod "card" order is **random** every session.
 * Your list of approved mods persists between sessions.
 
