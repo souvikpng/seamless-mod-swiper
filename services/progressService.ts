@@ -42,6 +42,14 @@ const safeSetItem = (key: string, value: string) => {
   }
 };
 
+const safeRemoveItem = (key: string) => {
+  try {
+    localStorage.removeItem(key);
+  } catch (error) {
+    console.warn('Unable to clear persisted progress:', error);
+  }
+};
+
 export const loadProgressForGame = (game: Game): { progress: UserProgress; migratedLegacy: boolean } => {
   const scopedSeen = safeGetItem(getSeenKey(game));
   const scopedApproved = safeGetItem(getApprovedKey(game));
@@ -81,11 +89,11 @@ export const saveProgressForGame = (game: Game, progress: UserProgress) => {
 };
 
 export const clearProgressForGame = (game: Game) => {
-  localStorage.removeItem(getSeenKey(game));
-  localStorage.removeItem(getApprovedKey(game));
+  safeRemoveItem(getSeenKey(game));
+  safeRemoveItem(getApprovedKey(game));
 };
 
 export const clearLegacyProgress = () => {
-  localStorage.removeItem(LEGACY_SEEN_KEY);
-  localStorage.removeItem(LEGACY_APPROVED_KEY);
+  safeRemoveItem(LEGACY_SEEN_KEY);
+  safeRemoveItem(LEGACY_APPROVED_KEY);
 };
