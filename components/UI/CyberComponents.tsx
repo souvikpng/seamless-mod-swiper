@@ -69,16 +69,26 @@ export const GlitchText: React.FC<{ text: string; className?: string; active?: b
   );
 };
 
-export const Panel: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => (
-  <div className={cn("bg-cp-dark/90 border-l-2 border-cp-yellow p-4 cp-clip-box relative backdrop-blur-sm", className)}>
-    {/* Decorative Elements */}
-    <div className="absolute top-0 right-0 w-16 h-1 bg-cp-yellow opacity-50" />
-    <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-cp-cyan" />
-    <div className="absolute top-2 right-2 flex gap-1">
-      <div className="w-1 h-1 bg-cp-red" />
-      <div className="w-1 h-1 bg-cp-red" />
-      <div className="w-1 h-1 bg-cp-red" />
+export const Panel: React.FC<{ children: React.ReactNode; className?: string; theme?: 'cyber' | 'mojave' }> = ({ children, className, theme = 'cyber' }) => {
+  if (theme === 'mojave') {
+    return (
+      <div className={cn("relative rounded-sm border border-[#4c3b22] bg-[#0b0905]/90 p-4 backdrop-blur-sm", className)}>
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("bg-cp-dark/90 border-l-2 border-cp-yellow p-4 cp-clip-box relative backdrop-blur-sm", className)}>
+      {/* Decorative Elements */}
+      <div className="absolute top-0 right-0 w-16 h-1 bg-cp-yellow opacity-50" />
+      <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-cp-cyan" />
+      <div className="absolute top-2 right-2 flex gap-1">
+        <div className="w-1 h-1 bg-cp-red" />
+        <div className="w-1 h-1 bg-cp-red" />
+        <div className="w-1 h-1 bg-cp-red" />
+      </div>
+      {children}
     </div>
-    {children}
-  </div>
-);
+  );
+};

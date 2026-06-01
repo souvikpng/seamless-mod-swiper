@@ -10,9 +10,14 @@ export const GAME_THEMES: Record<Game, GameTheme> = {
     font: 'Rajdhani',
     uiStyle: 'cyberpunk',
   },
-  // Placeholder themes for other games as per prompt focus on Cyberpunk
   [Game.RDR2]: { primary: '#8a0f0f', secondary: '#000', accent: '#fff', font: 'serif', uiStyle: 'western' },
-  [Game.NEWVEGAS]: { primary: '#ff9900', secondary: '#332200', accent: '#fff', font: 'sans-serif', uiStyle: 'retro' },
+  [Game.NEWVEGAS]: {
+    primary: '#d9902f',
+    secondary: '#173f2a',
+    accent: '#6bbf59',
+    font: 'Share Tech Mono',
+    uiStyle: 'retro',
+  },
   [Game.BG3]: { primary: '#4a1a1a', secondary: '#1a1a1a', accent: '#gold', font: 'serif', uiStyle: 'fantasy' },
   [Game.WITCHER3]: { primary: '#a32a2a', secondary: '#1a1a1a', accent: '#silver', font: 'serif', uiStyle: 'fantasy' },
 };

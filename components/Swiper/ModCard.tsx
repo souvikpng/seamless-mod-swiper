@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import { motion, useMotionValue, useTransform, PanInfo, animate, AnimationPlaybackControls } from 'framer-motion';
-import { Mod } from '../../types';
+import { Game, Mod } from '../../types';
 import { Panel } from '../UI/CyberComponents';
 import { ThumbsUp, User, Calendar } from 'lucide-react';
+import { getGamePresentation, isNewVegas } from '../../utils/gamePresentation';
 import { FALLBACK_IMAGE_URL, getModAuthorName, getModBodyText, safeImageUrl } from '../../utils/modPresentation';
 
 export interface SwipeSignal {
@@ -19,6 +20,7 @@ interface ModCardProps {
   swipeSignal?: SwipeSignal | null;
   variant?: 'active' | 'preview';
   isGhosted?: boolean;
+  game?: Game;
 }
 
 const SWIPE_THRESHOLD = 110;
@@ -30,7 +32,7 @@ const preloadImage = (src?: string) => {
   image.src = src;
 };
 
-const ModCard: React.FC<ModCardProps> = ({ mod, onSwipe, style, drag, swipeSignal, variant = 'active', isGhosted = false }) => {
+const ModCard: React.FC<ModCardProps> = ({ mod, onSwipe, style, drag, swipeSignal, variant = 'active', isGhosted = false, game = Game.CYBERPUNK }) => {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-220, 220], [-12, 12]);
   const isPreview = variant === 'preview';
@@ -40,6 +42,8 @@ const ModCard: React.FC<ModCardProps> = ({ mod, onSwipe, style, drag, swipeSigna
   const animationRef = useRef<AnimationPlaybackControls | null>(null);
   const isDismissingRef = useRef(false);
   const modImageUrl = safeImageUrl(mod.picture_url);
+  const presentation = getGamePresentation(game);
+  const mojave = isNewVegas(game);
 
   useEffect(() => {
     preloadImage(modImageUrl);
@@ -107,7 +111,7 @@ const ModCard: React.FC<ModCardProps> = ({ mod, onSwipe, style, drag, swipeSigna
       className={`absolute h-[65vh] w-full max-w-md select-none ${isPreview ? '' : 'cursor-grab active:cursor-grabbing'} ${isGhosted ? 'pointer-events-none' : ''}`}
     >
       {isPreview ? (
-        <Panel className="h-full overflow-hidden border border-cp-cyan/15 bg-black/65 p-0 select-none shadow-[0_18px_60px_rgba(0,0,0,0.35)]">
+        <Panel theme={mojave ? 'mojave' : 'cyber'} className={`h-full overflow-hidden border bg-black/65 p-0 select-none shadow-[0_18px_60px_rgba(0,0,0,0.35)] ${mojave ? 'border-[#6bbf59]/15 rounded-sm' : 'border-cp-cyan/15'}`}>
           <div className="absolute inset-0">
             <img
               src={modImageUrl}
@@ -123,34 +127,34 @@ const ModCard: React.FC<ModCardProps> = ({ mod, onSwipe, style, drag, swipeSigna
               draggable={false}
             />
             <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/38 to-black/90" />
-            <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(0,229,255,0.07),transparent_35%,rgba(252,238,10,0.04)_85%,transparent)]" />
+            <div className={`absolute inset-0 ${mojave ? 'bg-[linear-gradient(135deg,rgba(107,191,89,0.07),transparent_35%,rgba(217,144,47,0.06)_85%,transparent)]' : 'bg-[linear-gradient(135deg,rgba(0,229,255,0.07),transparent_35%,rgba(252,238,10,0.04)_85%,transparent)]'}`} />
           </div>
 
-          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cp-cyan/70 to-transparent" />
+          <div className={`absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent ${mojave ? 'via-[#6bbf59]/70' : 'via-cp-cyan/70'} to-transparent`} />
           <div className="absolute inset-x-6 top-6 flex items-center justify-between text-[10px] font-mono uppercase tracking-[0.3em] text-gray-500">
-            <span>Buffered</span>
-            <span className="text-cp-cyan/70">Standby</span>
+            <span>{presentation.previewState}</span>
+            <span className={mojave ? 'text-[#6bbf59]/70' : 'text-cp-cyan/70'}>{presentation.waitingState}</span>
           </div>
 
-          <div className="absolute inset-x-6 bottom-6 border border-cp-cyan/20 bg-black/55 px-4 py-4 backdrop-blur-sm">
-            <div className="text-[10px] font-mono uppercase tracking-[0.32em] text-cp-cyan/80">Next In Queue</div>
+          <div className={`absolute inset-x-6 bottom-6 border bg-black/55 px-4 py-4 backdrop-blur-sm ${mojave ? 'border-[#6bbf59]/20' : 'border-cp-cyan/20'}`}>
+            <div className={`text-[10px] font-mono uppercase tracking-[0.32em] ${mojave ? 'text-[#6bbf59]/80' : 'text-cp-cyan/80'}`}>{presentation.nextLabel}</div>
             <h3 className="mt-2 line-clamp-2 text-xl font-black uppercase leading-tight tracking-tight text-white">
               {mod.name || 'Unknown Mod'}
             </h3>
             <div className="mt-3 flex items-center justify-between gap-4 text-[11px] font-mono text-gray-400">
               <span className="truncate">{getModAuthorName(mod)}</span>
-              <span className="shrink-0 text-cp-yellow/80">ready</span>
+              <span className={`shrink-0 ${mojave ? 'text-[#d9902f]/80' : 'text-cp-yellow/80'}`}>{presentation.readyLabel}</span>
             </div>
           </div>
         </Panel>
       ) : (
-        <Panel className="relative h-full overflow-hidden border-l-4 border-cp-yellow bg-black p-0 select-none shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+        <Panel theme={mojave ? 'mojave' : 'cyber'} className={`relative h-full overflow-hidden border-l-4 bg-black p-0 select-none shadow-[0_24px_80px_rgba(0,0,0,0.45)] ${mojave ? 'rounded-sm border-[#4c3b22] border-l-[#d9902f]' : 'border-cp-yellow'}`}>
           <motion.div
             style={{ opacity: approveOpacity }}
             className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-green-500/30"
           >
             <div className="-rotate-12 border-4 border-green-500 px-8 py-4 text-6xl font-bold uppercase tracking-widest text-green-500">
-              Install
+              {presentation.approveOverlayLabel}
             </div>
           </motion.div>
 
@@ -159,7 +163,7 @@ const ModCard: React.FC<ModCardProps> = ({ mod, onSwipe, style, drag, swipeSigna
             className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-red-500/30"
           >
             <div className="rotate-12 border-4 border-red-500 px-8 py-4 text-6xl font-bold uppercase tracking-widest text-red-500">
-              Skip
+              {presentation.rejectOverlayLabel}
             </div>
           </motion.div>
 
@@ -183,7 +187,7 @@ const ModCard: React.FC<ModCardProps> = ({ mod, onSwipe, style, drag, swipeSigna
               <h2 className="line-clamp-2 text-3xl font-bold uppercase leading-none tracking-tighter text-white drop-shadow-md">
                 {mod.name || 'Unknown Mod'}
               </h2>
-              <div className="mt-1 flex items-center gap-2 font-mono text-sm text-cp-yellow">
+              <div className={`mt-1 flex items-center gap-2 font-mono text-sm ${presentation.primaryClass}`}>
                 <User size={14} />
                 <span>{getModAuthorName(mod)}</span>
               </div>
@@ -202,7 +206,7 @@ const ModCard: React.FC<ModCardProps> = ({ mod, onSwipe, style, drag, swipeSigna
                     : mod.created_time || 'Unknown'}
                 </span>
               </div>
-              <div className="flex items-center gap-2 text-sm font-bold text-cp-cyan">
+              <div className={`flex items-center gap-2 text-sm font-bold ${presentation.secondaryClass}`}>
                 <ThumbsUp size={14} />
                 <span>{(mod.endorsement_count ?? 0).toLocaleString()}</span>
               </div>

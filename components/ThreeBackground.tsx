@@ -1,9 +1,27 @@
 import React from 'react';
+import { Game } from '../types';
+import { isNewVegas } from '../utils/gamePresentation';
 
 const leftTraceOffsets = [10, 26, 44, 62];
 const rightTraceOffsets = [14, 34, 54, 74];
 
-const ThreeBackground: React.FC = () => {
+const ThreeBackground: React.FC<{ game?: Game }> = ({ game = Game.CYBERPUNK }) => {
+  if (isNewVegas(game)) {
+    return (
+      <div className="absolute inset-0 -z-10 overflow-hidden bg-[#070604]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,#1a130b_0%,#0d0b07_46%,#030302_100%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(217,144,47,0.05),rgba(0,0,0,0.58))]" />
+        <div className="absolute -left-[12%] top-[8%] h-[32rem] w-[32rem] rounded-full bg-[#d9902f]/10 blur-[120px] cp-float-slow" />
+        <div className="absolute right-[-10%] top-[18%] h-[34rem] w-[34rem] rounded-full bg-[#6bbf59]/8 blur-[150px] cp-float-reverse" />
+        <div className="absolute inset-x-0 bottom-0 h-[42%] bg-[linear-gradient(180deg,transparent,rgba(52,34,14,0.2)_48%,rgba(0,0,0,0.84))]" />
+        <div className="absolute left-1/2 bottom-[-18%] h-[28rem] w-[120vw] -translate-x-1/2 rounded-[50%] border-t border-[#d9902f]/15 bg-[#120d06]/40" />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(217,144,47,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(217,144,47,0.025)_1px,transparent_1px)] bg-[length:140px_140px] opacity-35" />
+        <div className="absolute inset-0 cp-noise-soft opacity-45" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.16)_44%,rgba(0,0,0,0.78)_100%)]" />
+      </div>
+    );
+  }
+
   return (
     <div className="absolute inset-0 -z-10 overflow-hidden bg-[#04050a]">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,#0b1220_0%,#06070d_48%,#020307_100%)]" />
