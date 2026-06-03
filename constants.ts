@@ -19,7 +19,7 @@ export const GAME_THEMES: Record<Game, GameTheme> = {
     uiStyle: 'retro',
   },
   [Game.BG3]: { primary: '#4a1a1a', secondary: '#1a1a1a', accent: '#gold', font: 'serif', uiStyle: 'fantasy' },
-  [Game.WITCHER3]: { primary: '#a32a2a', secondary: '#1a1a1a', accent: '#silver', font: 'serif', uiStyle: 'fantasy' },
+  [Game.STARDEW]: { primary: '#f2b84b', secondary: '#2f7d4b', accent: '#7fc8e8', font: 'Rajdhani', uiStyle: 'fantasy' },
 };
 
 export const MOCK_MODS: any[] = [

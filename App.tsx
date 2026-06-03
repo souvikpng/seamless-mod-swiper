@@ -18,7 +18,7 @@ import {
 } from './services/cacheService';
 import { clearLegacyProgress, clearProgressForGame, loadProgressForGame, saveProgressForGame } from './services/progressService';
 import { FALLBACK_IMAGE_URL, getModAuthorName, getModBodyText, getModExcerpt, needsDescriptionHydration, safeImageUrl } from './utils/modPresentation';
-import { getGamePresentation, isNewVegas } from './utils/gamePresentation';
+import { getGamePresentation } from './utils/gamePresentation';
 import { Download, List, LogOut, Zap, Trash2, Database, Settings, RotateCcw, RefreshCw } from 'lucide-react';
 
 interface LoadOptions {
@@ -629,7 +629,6 @@ const App: React.FC = () => {
   const canUndo = swipeHistory.length > 0 && swipePhase === 'ready';
   const isIntroPlaying = swipePhase === 'intro';
   const presentation = getGamePresentation(selectedGame);
-  const mojave = isNewVegas(selectedGame);
 
   return (
     <div className="relative min-h-screen text-white font-sans overflow-hidden">
@@ -676,7 +675,7 @@ const App: React.FC = () => {
               className={`bg-black/50 border p-2 transition-colors ${
                 isBulkLoading 
                   ? `${presentation.secondaryBorderClass} ${presentation.secondaryClass}` 
-                  : mojave ? 'border-gray-600 text-gray-400 hover:border-[#6bbf59] hover:text-[#6bbf59]' : 'border-gray-600 text-gray-400 hover:border-cp-cyan hover:text-cp-cyan'
+                  : `border-gray-600 text-gray-400 hover:text-white ${presentation.secondaryBorderClass}`
               }`}
               title="Fetch more mods"
             >
@@ -688,14 +687,14 @@ const App: React.FC = () => {
               <button 
                 type="button"
                 onClick={() => setShowSettings(!showSettings)}
-                className={`bg-black/50 border p-2 transition-colors ${showSettings ? `${presentation.secondaryBorderClass} ${presentation.secondaryClass}` : mojave ? 'border-gray-600 text-gray-400 hover:border-[#6bbf59] hover:text-[#6bbf59]' : 'border-gray-600 text-gray-400 hover:border-cp-cyan hover:text-cp-cyan'}`}
+                className={`bg-black/50 border p-2 transition-colors ${showSettings ? `${presentation.secondaryBorderClass} ${presentation.secondaryClass}` : `border-gray-600 text-gray-400 hover:text-white ${presentation.secondaryBorderClass}`}`}
               >
                 <Settings size={20} />
               </button>
               
               {/* Settings Dropdown */}
               {showSettings && (
-                <div className="absolute right-0 top-12 bg-black/95 border border-cp-gray p-4 min-w-[200px] z-50">
+                <div className={`absolute right-0 top-12 bg-black/95 border p-4 min-w-[200px] z-50 ${presentation.secondaryBorderClass}`}>
                   <h3 className={`${presentation.primaryClass} font-bold text-sm mb-3 uppercase tracking-wider`}>Settings</h3>
                   <button
                     type="button"
@@ -716,7 +715,7 @@ const App: React.FC = () => {
             <button 
               type="button"
               onClick={() => setView(view === 'list' ? 'swiping' : 'list')}
-              className={`bg-black/50 border p-2 hover:text-black transition-colors ${mojave ? 'border-[#d9902f] hover:bg-[#d9902f]' : 'border-cp-yellow hover:bg-cp-yellow'}`}
+              className={`bg-black/50 border p-2 hover:text-white transition-colors ${presentation.primaryBorderClass} ${presentation.primaryClass}`}
             >
               <div className="relative">
                 <List size={20} />
@@ -756,7 +755,7 @@ const App: React.FC = () => {
 
       {view === 'swiping' && isBulkLoading && !isLoading && loadProgress && (
         <div className="fixed left-1/2 top-20 z-40 w-[min(92vw,24rem)] -translate-x-1/2 pointer-events-none">
-          <div className={`border bg-black/80 px-4 py-3 backdrop-blur-md ${mojave ? 'rounded-sm border-[#6bbf59]/30 shadow-[0_0_30px_rgba(107,191,89,0.08)]' : 'cp-clip-box border-cp-cyan/30 shadow-[0_0_30px_rgba(0,229,255,0.08)]'}`}>
+          <div className={`border bg-black/80 px-4 py-3 backdrop-blur-md ${presentation.frameClass} ${presentation.shadowClass}`}>
             <div className={`flex items-center justify-between gap-3 text-[11px] font-mono uppercase tracking-[0.24em] ${presentation.secondaryClass}`}>
               <span className="flex items-center gap-2">
                 <RefreshCw size={14} className="animate-spin" />
@@ -767,7 +766,7 @@ const App: React.FC = () => {
             <p className="mt-2 text-xs font-mono text-gray-400">{loadProgress.message}</p>
             <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-900">
               <div
-                className={`h-full bg-gradient-to-r transition-all duration-300 ${mojave ? 'from-[#d9902f] via-[#6bbf59] to-[#d45f3d]' : 'from-cp-yellow via-cp-cyan to-cp-red'}`}
+                className={`h-full bg-gradient-to-r transition-all duration-300 ${presentation.progressGradientClass}`}
                 style={{ width: `${backgroundProgressPercent}%` }}
               />
             </div>
@@ -830,21 +829,21 @@ const App: React.FC = () => {
 
         {view === 'list' && (
           <div className="flex-1 max-w-4xl mx-auto w-full overflow-hidden flex flex-col pb-4 -mt-4">
-            <Panel theme={mojave ? 'mojave' : 'cyber'} className="flex-1 flex flex-col overflow-hidden bg-black/90">
+            <Panel theme={presentation.theme} className="flex-1 flex flex-col overflow-hidden bg-black/90">
               <div className="border-b border-gray-800 p-6 flex justify-between items-center">
                 <GlitchText text={presentation.approvedListTitle} className="text-2xl font-bold text-white" />
-                {mojave ? (
+                {presentation.theme !== 'cyber' ? (
                   <button
                     type="button"
                     onClick={handleExport}
                     disabled={approvedMods.length === 0}
-                    className="rounded-sm border border-[#6bbf59]/55 bg-[#10150c] px-5 py-3 font-mono text-xs font-bold uppercase tracking-[0.22em] text-[#6bbf59] transition-colors hover:border-[#d9902f] hover:text-[#d9902f] disabled:cursor-not-allowed disabled:opacity-45"
+                    className={`border bg-black/45 px-5 py-3 font-mono text-xs font-bold uppercase tracking-[0.22em] transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${presentation.buttonShapeClass} ${presentation.approveButtonClass}`}
                   >
-                    Export Ledger
+                    {presentation.exportLabel}
                   </button>
                 ) : (
                   <CyberButton 
-                    label="Export List" 
+                    label={presentation.exportLabel} 
                     variant="success" 
                     onClick={handleExport}
                     disabled={approvedMods.length === 0}
@@ -859,7 +858,7 @@ const App: React.FC = () => {
                   </div>
                 ) : (
                   approvedMods.map((mod) => (
-                    <div key={mod.mod_id} className={`flex gap-4 p-4 border border-gray-800 bg-gray-900/50 transition-colors group ${mojave ? 'hover:border-[#6bbf59]' : 'hover:border-cp-cyan'}`}>
+                    <div key={mod.mod_id} className={`flex gap-4 p-4 border transition-colors group ${presentation.listItemClass}`}>
                       <img
                         src={safeImageUrl(mod.picture_url)}
                         alt={mod.name || 'Mod artwork'}
@@ -871,7 +870,7 @@ const App: React.FC = () => {
                         className="w-24 h-24 object-cover border border-gray-700 bg-black"
                       />
                       <div className="flex-1">
-                        <h3 className={`text-xl font-bold text-white ${mojave ? 'group-hover:text-[#6bbf59]' : 'group-hover:text-cp-cyan'}`}>{mod.name}</h3>
+                        <h3 className={`text-xl font-bold text-white ${presentation.secondaryClass}`}>{mod.name}</h3>
                         <p className="text-sm text-gray-400 font-mono mb-2">{getModAuthorName(mod)}</p>
                         <p className="text-xs text-gray-500 line-clamp-3">{getModExcerpt(mod, 240)}</p>
                       </div>
@@ -908,9 +907,9 @@ const App: React.FC = () => {
       {/* Reset Confirmation Modal */}
       {showResetConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80">
-          <div className={`bg-gray-900 border p-6 max-w-sm mx-4 ${mojave ? 'rounded-sm border-[#d45f3d]' : 'border-cp-red'}`}>
-            <h3 className={`${mojave ? 'text-[#d45f3d]' : 'text-cp-red'} font-bold text-lg mb-4 uppercase tracking-wider`}>
-              {mojave ? 'Clear Trail Log' : 'Confirm Reset'}
+          <div className={`bg-gray-900 border p-6 max-w-sm mx-4 ${presentation.frameClass}`}>
+            <h3 className={`${presentation.dangerClass} font-bold text-lg mb-4 uppercase tracking-wider`}>
+              {presentation.resetTitle}
             </h3>
              <p className="text-gray-300 text-sm mb-6">
                This will clear your progress for the active game, including:
@@ -936,9 +935,9 @@ const App: React.FC = () => {
               <button
                 type="button"
                 onClick={handleResetProgress}
-                className={`flex-1 px-4 py-2 border text-white transition-colors ${mojave ? 'rounded-sm border-[#d45f3d] bg-[#8f3d2d] hover:bg-[#d45f3d]/80' : 'bg-cp-red border-cp-red hover:bg-cp-red/80'}`}
+                className={`flex-1 px-4 py-2 border text-white transition-colors ${presentation.buttonShapeClass} ${presentation.rejectButtonClass}`}
               >
-                {mojave ? 'Clear All' : 'Reset All'}
+                {presentation.resetAction}
               </button>
             </div>
           </div>

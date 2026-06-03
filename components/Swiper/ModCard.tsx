@@ -3,7 +3,7 @@ import { motion, useMotionValue, useTransform, PanInfo, animate, AnimationPlayba
 import { Game, Mod } from '../../types';
 import { Panel } from '../UI/CyberComponents';
 import { ThumbsUp, User, Calendar } from 'lucide-react';
-import { getGamePresentation, isNewVegas } from '../../utils/gamePresentation';
+import { getGamePresentation } from '../../utils/gamePresentation';
 import { FALLBACK_IMAGE_URL, getModAuthorName, getModBodyText, safeImageUrl } from '../../utils/modPresentation';
 
 export interface SwipeSignal {
@@ -43,7 +43,6 @@ const ModCard: React.FC<ModCardProps> = ({ mod, onSwipe, style, drag, swipeSigna
   const isDismissingRef = useRef(false);
   const modImageUrl = safeImageUrl(mod.picture_url);
   const presentation = getGamePresentation(game);
-  const mojave = isNewVegas(game);
 
   useEffect(() => {
     preloadImage(modImageUrl);
@@ -111,7 +110,7 @@ const ModCard: React.FC<ModCardProps> = ({ mod, onSwipe, style, drag, swipeSigna
       className={`absolute h-[65vh] w-full max-w-md select-none ${isPreview ? '' : 'cursor-grab active:cursor-grabbing'} ${isGhosted ? 'pointer-events-none' : ''}`}
     >
       {isPreview ? (
-        <Panel theme={mojave ? 'mojave' : 'cyber'} className={`h-full overflow-hidden border bg-black/65 p-0 select-none shadow-[0_18px_60px_rgba(0,0,0,0.35)] ${mojave ? 'border-[#6bbf59]/15 rounded-sm' : 'border-cp-cyan/15'}`}>
+        <Panel theme={presentation.theme} className={`h-full overflow-hidden p-0 select-none ${presentation.previewFrameClass}`}>
           <div className="absolute inset-0">
             <img
               src={modImageUrl}
@@ -127,28 +126,28 @@ const ModCard: React.FC<ModCardProps> = ({ mod, onSwipe, style, drag, swipeSigna
               draggable={false}
             />
             <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/38 to-black/90" />
-            <div className={`absolute inset-0 ${mojave ? 'bg-[linear-gradient(135deg,rgba(107,191,89,0.07),transparent_35%,rgba(217,144,47,0.06)_85%,transparent)]' : 'bg-[linear-gradient(135deg,rgba(0,229,255,0.07),transparent_35%,rgba(252,238,10,0.04)_85%,transparent)]'}`} />
+            <div className={`absolute inset-0 ${presentation.softSecondaryBgClass}`} />
           </div>
 
-          <div className={`absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent ${mojave ? 'via-[#6bbf59]/70' : 'via-cp-cyan/70'} to-transparent`} />
+          <div className={`absolute inset-x-0 top-0 h-px ${presentation.secondaryBgClass} opacity-60`} />
           <div className="absolute inset-x-6 top-6 flex items-center justify-between text-[10px] font-mono uppercase tracking-[0.3em] text-gray-500">
             <span>{presentation.previewState}</span>
-            <span className={mojave ? 'text-[#6bbf59]/70' : 'text-cp-cyan/70'}>{presentation.waitingState}</span>
+            <span className={presentation.secondaryClass}>{presentation.waitingState}</span>
           </div>
 
-          <div className={`absolute inset-x-6 bottom-6 border bg-black/55 px-4 py-4 backdrop-blur-sm ${mojave ? 'border-[#6bbf59]/20' : 'border-cp-cyan/20'}`}>
-            <div className={`text-[10px] font-mono uppercase tracking-[0.32em] ${mojave ? 'text-[#6bbf59]/80' : 'text-cp-cyan/80'}`}>{presentation.nextLabel}</div>
+          <div className={`absolute inset-x-6 bottom-6 border bg-black/55 px-4 py-4 backdrop-blur-sm ${presentation.secondaryBorderClass}`}>
+            <div className={`text-[10px] font-mono uppercase tracking-[0.32em] ${presentation.secondaryClass}`}>{presentation.nextLabel}</div>
             <h3 className="mt-2 line-clamp-2 text-xl font-black uppercase leading-tight tracking-tight text-white">
               {mod.name || 'Unknown Mod'}
             </h3>
             <div className="mt-3 flex items-center justify-between gap-4 text-[11px] font-mono text-gray-400">
               <span className="truncate">{getModAuthorName(mod)}</span>
-              <span className={`shrink-0 ${mojave ? 'text-[#d9902f]/80' : 'text-cp-yellow/80'}`}>{presentation.readyLabel}</span>
+              <span className={`shrink-0 ${presentation.primaryClass}`}>{presentation.readyLabel}</span>
             </div>
           </div>
         </Panel>
       ) : (
-        <Panel theme={mojave ? 'mojave' : 'cyber'} className={`relative h-full overflow-hidden border-l-4 bg-black p-0 select-none shadow-[0_24px_80px_rgba(0,0,0,0.45)] ${mojave ? 'rounded-sm border-[#4c3b22] border-l-[#d9902f]' : 'border-cp-yellow'}`}>
+        <Panel theme={presentation.theme} className={`relative h-full overflow-hidden p-0 select-none ${presentation.cardFrameClass}`}>
           <motion.div
             style={{ opacity: approveOpacity }}
             className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-green-500/30"
@@ -194,7 +193,7 @@ const ModCard: React.FC<ModCardProps> = ({ mod, onSwipe, style, drag, swipeSigna
             </div>
           </div>
 
-          <div className="relative flex h-1/2 flex-col bg-cp-dark px-6 py-5" style={{ userSelect: 'none' }}>
+          <div className={`relative flex h-1/2 flex-col px-6 py-5 ${presentation.cardBodyClass}`} style={{ userSelect: 'none' }}>
             <div className="pointer-events-none absolute inset-0 z-0 opacity-5 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%]" />
 
             <div className="relative z-10 flex items-center justify-between border-b border-gray-800 pb-2">

@@ -52,7 +52,7 @@ export enum Game {
   RDR2 = 'reddeadredemption2',
   NEWVEGAS = 'newvegas',
   BG3 = 'baldursgate3',
-  WITCHER3 = 'witcher3',
+  STARDEW = 'stardewvalley',
 }
 
 export interface GameTheme {

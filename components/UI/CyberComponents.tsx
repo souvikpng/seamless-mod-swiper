@@ -1,6 +1,8 @@
 import React from 'react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { ThemeId, getGamePresentation } from '../../utils/gamePresentation';
+import { Game } from '../../types';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -69,10 +71,13 @@ export const GlitchText: React.FC<{ text: string; className?: string; active?: b
   );
 };
 
-export const Panel: React.FC<{ children: React.ReactNode; className?: string; theme?: 'cyber' | 'mojave' }> = ({ children, className, theme = 'cyber' }) => {
-  if (theme === 'mojave') {
+export const Panel: React.FC<{ children: React.ReactNode; className?: string; theme?: ThemeId }> = ({ children, className, theme = 'cyber' }) => {
+  if (theme !== 'cyber') {
+    const game = Object.values(Game).find((entry) => getGamePresentation(entry).theme === theme) ?? Game.CYBERPUNK;
+    const presentation = getGamePresentation(game);
+
     return (
-      <div className={cn("relative rounded-sm border border-[#4c3b22] bg-[#0b0905]/90 p-4 backdrop-blur-sm", className)}>
+      <div className={cn('relative p-4', presentation.panelClass, className)}>
         {children}
       </div>
     );

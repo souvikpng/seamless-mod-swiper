@@ -4,7 +4,7 @@ import { Game, Mod } from '../../types';
 import ModCard, { SwipeSignal } from './ModCard';
 import { GlitchText } from '../UI/CyberComponents';
 import { CheckCircle, LoaderCircle, Undo2, XCircle } from 'lucide-react';
-import { getGamePresentation, isNewVegas } from '../../utils/gamePresentation';
+import { getGamePresentation } from '../../utils/gamePresentation';
 import { FALLBACK_IMAGE_URL, getModAuthorName, safeImageUrl } from '../../utils/modPresentation';
 
 interface UndoAnimationSignal {
@@ -69,18 +69,16 @@ const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
 };
 
 const CardBack: React.FC<{ accent?: 'yellow' | 'cyan'; className?: string; game?: Game }> = ({ accent = 'yellow', className = '', game = Game.CYBERPUNK }) => {
-  const mojave = isNewVegas(game);
-  const accentClasses = accent === 'yellow'
-    ? mojave ? 'border-[#d9902f]/45 shadow-[0_20px_60px_rgba(217,144,47,0.14)]' : 'border-cp-yellow/45 shadow-[0_20px_60px_rgba(252,238,10,0.14)]'
-    : mojave ? 'border-[#6bbf59]/35 shadow-[0_20px_60px_rgba(107,191,89,0.12)]' : 'border-cp-cyan/35 shadow-[0_20px_60px_rgba(0,229,255,0.12)]';
+  const presentation = getGamePresentation(game);
+  const accentClasses = accent === 'yellow' ? presentation.primaryBorderClass : presentation.secondaryBorderClass;
 
   return (
-    <div className={`absolute inset-0 overflow-hidden border bg-[linear-gradient(145deg,#141111,#09090d_45%,#08070b)] ${mojave ? 'rounded-sm' : 'cp-clip-box'} ${accentClasses} ${className}`}>
-      <div className={`absolute inset-0 ${mojave ? 'bg-[linear-gradient(135deg,rgba(217,144,47,0.16),transparent_36%,rgba(107,191,89,0.08)_72%,transparent)]' : 'bg-[linear-gradient(135deg,rgba(252,238,10,0.16),transparent_36%,rgba(0,229,255,0.08)_72%,transparent)]'}`} />
+    <div className={`absolute inset-0 overflow-hidden border ${presentation.cardBackClass} ${accentClasses} ${className}`}>
+      <div className={`absolute inset-0 ${presentation.softPrimaryBgClass}`} />
       <div className="absolute inset-5 border border-white/5" />
       <div className="absolute inset-x-8 top-10 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.34em] text-gray-500">
-        <span>{mojave ? 'Deck' : 'Stack'}</span>
-        <span>{mojave ? 'Trail' : 'Sync'}</span>
+        <span>{presentation.cardBackLeft}</span>
+        <span>{presentation.cardBackRight}</span>
       </div>
       <div className="absolute inset-x-8 top-24 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
       <div className="absolute inset-x-8 bottom-16 grid gap-3">
@@ -97,7 +95,6 @@ const CardBack: React.FC<{ accent?: 'yellow' | 'cyan'; className?: string; game?
 
 const DeckIntroOverlay: React.FC<DeckIntroOverlayProps> = ({ active, mod, game }) => {
   const presentation = getGamePresentation(game);
-  const mojave = isNewVegas(game);
   return (
     <AnimatePresence>
       {active && (
@@ -112,7 +109,7 @@ const DeckIntroOverlay: React.FC<DeckIntroOverlayProps> = ({ active, mod, game }
               initial={{ opacity: 0, scale: 0.92, y: 36 }}
               animate={{ opacity: [0, 1, 1, 0], scale: [0.92, 1, 1, 1.02], y: [36, 0, 0, -12] }}
               transition={{ duration: 1.18, delay: 0.44, times: [0, 0.18, 0.72, 1] }}
-              className={`absolute -top-14 left-1/2 -translate-x-1/2 border bg-black/70 px-5 py-3 backdrop-blur-md ${mojave ? 'border-[#d9902f]/25' : 'border-cp-yellow/25'}`}
+              className={`absolute -top-14 left-1/2 -translate-x-1/2 border bg-black/70 px-5 py-3 backdrop-blur-md ${presentation.primaryBorderClass}`}
             >
               <GlitchText active text={presentation.introLabel} className={`font-mono text-xs uppercase tracking-[0.42em] ${presentation.primaryClass}`} />
             </motion.div>
@@ -138,7 +135,7 @@ const DeckIntroOverlay: React.FC<DeckIntroOverlayProps> = ({ active, mod, game }
                 className="absolute inset-0"
                 style={{ transformStyle: 'preserve-3d' }}
               >
-                <div className={`absolute inset-0 overflow-hidden border-l-4 border bg-black shadow-[0_24px_80px_rgba(0,0,0,0.45)] ${mojave ? 'rounded-sm border-l-[#d9902f] border-[#6bbf59]/20' : 'cp-clip-box border-l-cp-yellow border-cp-cyan/20'}`}>
+                <div className={`absolute inset-0 overflow-hidden border bg-black ${presentation.cardFrameClass}`}>
                   <img src={safeImageUrl(mod.picture_url)} alt="" onError={handleImageError} referrerPolicy="no-referrer" className="h-1/2 w-full object-cover opacity-70" draggable={false} />
                   <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-t from-black via-transparent to-black/10" />
                   <div className="absolute inset-x-5 top-[42%]">
@@ -157,7 +154,6 @@ const DeckIntroOverlay: React.FC<DeckIntroOverlayProps> = ({ active, mod, game }
 
 const UndoRecallOverlay: React.FC<UndoRecallOverlayProps> = ({ mod, game }) => {
   const presentation = getGamePresentation(game);
-  const mojave = isNewVegas(game);
   return (
     <AnimatePresence>
       <motion.div
@@ -173,9 +169,9 @@ const UndoRecallOverlay: React.FC<UndoRecallOverlayProps> = ({ mod, game }) => {
           className="relative h-[65vh] w-full max-w-md"
           style={{ transformStyle: 'preserve-3d' }}
         >
-          <CardBack game={game} className={mojave ? 'shadow-[0_18px_50px_rgba(217,144,47,0.18)]' : 'shadow-[0_18px_50px_rgba(252,238,10,0.18)]'} />
+          <CardBack game={game} className={presentation.shadowClass} />
           <div
-            className={`absolute inset-0 overflow-hidden border-l-4 border bg-black ${mojave ? 'rounded-sm border-l-[#d9902f] border-[#6bbf59]/20' : 'cp-clip-box border-l-cp-yellow border-cp-cyan/20'}`}
+            className={`absolute inset-0 overflow-hidden border bg-black ${presentation.cardFrameClass}`}
             style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
           >
             <img src={safeImageUrl(mod.picture_url)} alt="" onError={handleImageError} referrerPolicy="no-referrer" className="h-1/2 w-full object-cover opacity-60" draggable={false} />
@@ -184,7 +180,7 @@ const UndoRecallOverlay: React.FC<UndoRecallOverlayProps> = ({ mod, game }) => {
               <h3 className="line-clamp-2 text-3xl font-black uppercase leading-none tracking-tight text-white">{mod.name || 'Unknown Mod'}</h3>
               <p className={`mt-2 font-mono text-sm ${presentation.primaryClass}`}>{getModAuthorName(mod)}</p>
             </div>
-            <div className={`absolute inset-x-5 bottom-12 border bg-black/55 px-4 py-3 backdrop-blur-sm ${mojave ? 'border-[#6bbf59]/20' : 'border-cp-cyan/20'}`}>
+            <div className={`absolute inset-x-5 bottom-12 border bg-black/55 px-4 py-3 backdrop-blur-sm ${presentation.secondaryBorderClass}`}>
               <GlitchText active text={presentation.recallLabel} className={`font-mono text-xs uppercase tracking-[0.32em] ${presentation.secondaryClass}`} />
             </div>
           </div>
@@ -196,7 +192,6 @@ const UndoRecallOverlay: React.FC<UndoRecallOverlayProps> = ({ mod, game }) => {
 
 const OutgoingSwipeOverlay: React.FC<OutgoingSwipeOverlayProps> = ({ swipe, game }) => {
   const presentation = getGamePresentation(game);
-  const mojave = isNewVegas(game);
   const exitX = swipe.direction === 'right' ? 540 : -540;
   const exitRotate = swipe.direction === 'right' ? 12 : -12;
 
@@ -207,11 +202,11 @@ const OutgoingSwipeOverlay: React.FC<OutgoingSwipeOverlayProps> = ({ swipe, game
       transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
       className="pointer-events-none absolute inset-0 z-[68]"
     >
-      <div className={`relative h-full w-full overflow-hidden border-l-4 border bg-black shadow-[0_24px_80px_rgba(0,0,0,0.45)] ${mojave ? 'rounded-sm border-l-[#d9902f] border-[#6bbf59]/20' : 'cp-clip-box border-l-cp-yellow border-cp-cyan/20'}`}>
+      <div className={`relative h-full w-full overflow-hidden border bg-black ${presentation.cardFrameClass}`}>
         <img src={safeImageUrl(swipe.mod.picture_url)} alt="" onError={handleImageError} referrerPolicy="no-referrer" className="h-1/2 w-full object-cover opacity-75" draggable={false} />
         <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-t from-black via-transparent to-black/10" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black" />
-        <div className={`absolute inset-0 ${swipe.direction === 'right' ? mojave ? 'bg-[#6bbf59]/16' : 'bg-cp-cyan/16' : mojave ? 'bg-[#d45f3d]/16' : 'bg-cp-red/16'}`} />
+        <div className={`absolute inset-0 ${swipe.direction === 'right' ? presentation.softSecondaryBgClass : 'bg-red-500/10'}`} />
         <div className="absolute inset-x-5 top-[42%]">
           <h3 className="line-clamp-2 text-3xl font-black uppercase leading-none tracking-tight text-white">{swipe.mod.name || 'Unknown Mod'}</h3>
           <p className={`mt-2 font-mono text-sm ${presentation.primaryClass}`}>{getModAuthorName(swipe.mod)}</p>
@@ -238,7 +233,6 @@ const CardStack: React.FC<CardStackProps> = ({
   game = Game.CYBERPUNK,
 }) => {
   const presentation = getGamePresentation(game);
-  const mojave = isNewVegas(game);
   const [swipeSignal, setSwipeSignal] = useState<SwipeSignal | null>(null);
   const [introActive, setIntroActive] = useState(false);
   const [activeUndo, setActiveUndo] = useState<UndoAnimationSignal | null>(null);
@@ -384,11 +378,11 @@ const CardStack: React.FC<CardStackProps> = ({
 
   if (currentIndex >= mods.length) {
     return (
-      <div className={`mx-auto max-w-md border bg-cp-dark/80 p-8 text-center backdrop-blur-md ${mojave ? 'rounded-sm border-[#4c3b22]' : 'cp-clip-box border-cp-gray'}`}>
+      <div className={`mx-auto max-w-md border p-8 text-center backdrop-blur-md ${presentation.compactPanelClass}`}>
         {isRefreshing ? (
           <>
-            <div className={`relative mb-6 flex h-20 w-20 items-center justify-center rounded-full border bg-black/50 mx-auto ${mojave ? 'border-[#6bbf59]/40' : 'border-cp-cyan/40'}`}>
-              <div className={`absolute inset-0 rounded-full border animate-spin ${mojave ? 'border-[#d9902f]/20' : 'border-cp-yellow/20'}`} style={{ animationDuration: '2.8s' }} />
+            <div className={`relative mb-6 flex h-20 w-20 items-center justify-center rounded-full border bg-black/50 mx-auto ${presentation.secondaryBorderClass}`}>
+              <div className={`absolute inset-0 rounded-full border animate-spin ${presentation.primaryBorderClass} opacity-30`} style={{ animationDuration: '2.8s' }} />
               <LoaderCircle className={`h-8 w-8 animate-spin ${presentation.secondaryClass}`} />
             </div>
             <GlitchText active text={presentation.loadingTitle} className="mb-3 text-3xl font-black uppercase tracking-[0.24em] text-white" />
@@ -405,7 +399,7 @@ const CardStack: React.FC<CardStackProps> = ({
               <button
                 type="button"
                 onClick={() => onUndo?.()}
-                className={`mt-6 border bg-black/55 px-4 py-3 text-gray-400 transition-colors ${mojave ? 'rounded-sm border-[#4c3b22] hover:border-[#d9902f]/60 hover:text-[#d9902f]' : 'cp-clip-btn border-gray-700 hover:border-cp-yellow/50 hover:text-cp-yellow'}`}
+                className={`mt-6 border px-4 py-3 transition-colors ${presentation.neutralButtonClass}`}
               >
                 <span className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.28em]">
                   <Undo2 size={14} />
@@ -467,7 +461,7 @@ const CardStack: React.FC<CardStackProps> = ({
           type="button"
           onClick={() => onUndo?.()}
           disabled={!canUndo || controlsLocked || swipeInProgress.current}
-          className={`border bg-black/55 px-4 py-3 text-gray-400 transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${mojave ? 'rounded-sm border-[#4c3b22] hover:border-[#d9902f]/60 hover:text-[#d9902f]' : 'cp-clip-btn border-gray-700 hover:border-cp-yellow/50 hover:text-cp-yellow'}`}
+          className={`border px-4 py-3 transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${presentation.neutralButtonClass}`}
         >
           <span className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.28em]">
             <Undo2 size={14} />
@@ -479,7 +473,7 @@ const CardStack: React.FC<CardStackProps> = ({
           type="button"
           onClick={() => triggerSwipe('left')}
           disabled={controlsLocked || swipeInProgress.current}
-          className={`min-w-[8.75rem] border bg-black/60 px-5 py-3 transition-all hover:text-white disabled:cursor-not-allowed disabled:opacity-45 ${mojave ? 'rounded-sm border-[#8f3d2d]/55 text-[#d45f3d] hover:border-[#d45f3d] hover:bg-[#d45f3d]/10' : 'cp-clip-btn border-cp-red/45 text-cp-red hover:border-cp-red hover:bg-cp-red/10'}`}
+          className={`min-w-[8.75rem] border px-5 py-3 transition-all disabled:cursor-not-allowed disabled:opacity-45 ${presentation.rejectButtonClass}`}
         >
           <span className="flex items-center justify-between gap-4 font-mono uppercase tracking-[0.24em]">
             <span className="flex items-center gap-2 text-sm font-bold"><XCircle size={18} /> {presentation.rejectLabel}</span>
@@ -491,7 +485,7 @@ const CardStack: React.FC<CardStackProps> = ({
           type="button"
           onClick={() => triggerSwipe('right')}
           disabled={controlsLocked || swipeInProgress.current}
-          className={`min-w-[8.75rem] border bg-black/60 px-5 py-3 transition-all hover:text-white disabled:cursor-not-allowed disabled:opacity-45 ${mojave ? 'rounded-sm border-[#6bbf59]/45 text-[#6bbf59] hover:border-[#6bbf59] hover:bg-[#6bbf59]/10' : 'cp-clip-btn border-cp-cyan/45 text-cp-cyan hover:border-cp-cyan hover:bg-cp-cyan/10'}`}
+          className={`min-w-[8.75rem] border px-5 py-3 transition-all disabled:cursor-not-allowed disabled:opacity-45 ${presentation.approveButtonClass}`}
         >
           <span className="flex items-center justify-between gap-4 font-mono uppercase tracking-[0.24em]">
             <span className="flex items-center gap-2 text-sm font-bold"><CheckCircle size={18} /> {presentation.approveLabel}</span>
